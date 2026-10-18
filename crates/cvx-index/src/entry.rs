@@ -264,7 +264,7 @@ pub fn path_to_bytes(path: &Path) -> Result<Vec<u8>> {
         let path = path.to_str().ok_or_else(|| Error::InvalidPath {
             path: path.display().to_string(),
         })?;
-        Ok(path.as_bytes().to_vec())
+        Ok(path.replace('\\', "/").into_bytes())
     }
 }
 
