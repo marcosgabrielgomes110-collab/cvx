@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, IoResultExt, Result};
 use cvx_ignore::WorktreeWalker;
-use cvx_index::{IndexEntry, MODE_EXECUTABLE, MODE_FILE, MODE_SYMLINK, path_to_bytes};
+#[cfg(unix)]
+use cvx_index::MODE_EXECUTABLE;
+use cvx_index::{IndexEntry, MODE_FILE, MODE_SYMLINK, path_to_bytes};
 use cvx_object::{ObjectId, ObjectKind, hash_object};
 use cvx_ref::Head;
 
