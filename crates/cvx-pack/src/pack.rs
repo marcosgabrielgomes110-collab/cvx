@@ -435,6 +435,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::permissions_set_readonly_false)]
     fn rejects_a_truncated_pack() {
         let Some(fixture) = GitFixture::new() else {
             return;

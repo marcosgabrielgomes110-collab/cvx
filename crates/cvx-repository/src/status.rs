@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(unix)]
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -359,7 +360,10 @@ fn worktree_mode(metadata: &std::fs::Metadata, filemode: bool) -> u32 {
         }
     }
     #[cfg(not(unix))]
-    let _ = filemode;
+    {
+        let _ = metadata;
+        let _ = filemode;
+    }
     MODE_FILE
 }
 
@@ -387,7 +391,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn repository(temp: &Path) -> Repository {
-        match Repository::init(InitOptions {
+        let repository = match Repository::init(InitOptions {
             directory: temp.to_path_buf(),
             ..InitOptions::default()
         })
@@ -395,7 +399,16 @@ mod tests {
         {
             crate::InitOutcome::Created(repository) => repository,
             _ => panic!("expected new repository"),
-        }
+        };
+        configure_identity(&repository);
+        repository
+    }
+
+    fn configure_identity(repository: &Repository) {
+        let path = repository.control_dir().join("config");
+        let mut config = std::fs::read_to_string(&path).expect("config");
+        config.push_str("\n[user]\n\tname = Test User\n\temail = test@example.com\n");
+        std::fs::write(path, config).expect("write config");
     }
 
     fn add_all(repository: &Repository, cwd: &Path) {

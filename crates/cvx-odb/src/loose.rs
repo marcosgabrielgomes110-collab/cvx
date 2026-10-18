@@ -159,6 +159,7 @@ mod tests {
         (temp, store)
     }
 
+    #[allow(clippy::permissions_set_readonly_false)]
     fn remove_readonly(path: &std::path::Path) {
         #[cfg(unix)]
         {

@@ -391,7 +391,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn repository(temp: &std::path::Path) -> Repository {
-        match Repository::init(InitOptions {
+        let repository = match Repository::init(InitOptions {
             directory: temp.to_path_buf(),
             ..InitOptions::default()
         })
@@ -399,7 +399,16 @@ mod tests {
         {
             crate::InitOutcome::Created(repository) => repository,
             _ => panic!("expected new repository"),
-        }
+        };
+        configure_identity(&repository);
+        repository
+    }
+
+    fn configure_identity(repository: &Repository) {
+        let path = repository.control_dir().join("config");
+        let mut config = std::fs::read_to_string(&path).expect("config");
+        config.push_str("\n[user]\n\tname = Test User\n\temail = test@example.com\n");
+        std::fs::write(path, config).expect("write config");
     }
 
     fn add_all(repository: &Repository, cwd: &std::path::Path) {
