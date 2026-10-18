@@ -1,0 +1,18 @@
+[package]
+name = "cvx-merge"
+description = "Three-way merge and conflict representation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-diff = { workspace = true }
+cvx-index = { workspace = true }
+cvx-object = { workspace = true }
+
+[lints]
+workspace = true

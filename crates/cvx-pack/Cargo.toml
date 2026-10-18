@@ -1,0 +1,17 @@
+[package]
+name = "cvx-pack"
+description = "Packfile, index and delta codecs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-object = { workspace = true }
+flate2 = { workspace = true }
+
+[lints]
+workspace = true

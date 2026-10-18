@@ -1,0 +1,99 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/cvx-cli",
+    "crates/cvx-core",
+    "crates/cvx-repository",
+    "crates/cvx-object",
+    "crates/cvx-odb",
+    "crates/cvx-index",
+    "crates/cvx-ref",
+    "crates/cvx-config",
+    "crates/cvx-ignore",
+    "crates/cvx-attributes",
+    "crates/cvx-revision",
+    "crates/cvx-diff",
+    "crates/cvx-merge",
+    "crates/cvx-worktree",
+    "crates/cvx-pack",
+    "crates/cvx-protocol",
+    "crates/cvx-transport",
+    "crates/cvx-credential",
+    "crates/cvx-github-api",
+    "crates/cvx-github-workflow",
+    "crates/cvx-testkit",
+]
+default-members = ["crates/cvx-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["CVX contributors"]
+description = "A Git-compatible version control system written in Rust"
+keywords = ["git", "vcs", "version-control"]
+categories = ["command-line-utilities", "development-tools"]
+publish = false
+
+[workspace.dependencies]
+# Internal crates.
+cvx-attributes = { path = "crates/cvx-attributes" }
+cvx-cli = { path = "crates/cvx-cli" }
+cvx-config = { path = "crates/cvx-config" }
+cvx-core = { path = "crates/cvx-core" }
+cvx-credential = { path = "crates/cvx-credential" }
+cvx-diff = { path = "crates/cvx-diff" }
+cvx-github-api = { path = "crates/cvx-github-api" }
+cvx-github-workflow = { path = "crates/cvx-github-workflow" }
+cvx-ignore = { path = "crates/cvx-ignore" }
+cvx-index = { path = "crates/cvx-index" }
+cvx-merge = { path = "crates/cvx-merge" }
+cvx-object = { path = "crates/cvx-object" }
+cvx-odb = { path = "crates/cvx-odb" }
+cvx-pack = { path = "crates/cvx-pack" }
+cvx-protocol = { path = "crates/cvx-protocol" }
+cvx-ref = { path = "crates/cvx-ref" }
+cvx-repository = { path = "crates/cvx-repository" }
+cvx-revision = { path = "crates/cvx-revision" }
+cvx-testkit = { path = "crates/cvx-testkit" }
+cvx-transport = { path = "crates/cvx-transport" }
+cvx-worktree = { path = "crates/cvx-worktree" }
+
+# External crates.
+assert_cmd = "2.0"
+bstr = "1.9"
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+criterion = "0.5"
+flate2 = "1.0"
+home = "0.5"
+ignore = "0.4"
+predicates = "3.1"
+proptest = "1.4"
+serde = { version = "1.0", features = ["derive"] }
+sha1 = "0.10"
+tempfile = "3.10"
+thiserror = "2.0"
+time = { version = "0.3", features = ["formatting", "parsing"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_lifetimes = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.bench]
+inherits = "release"
