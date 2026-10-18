@@ -1,6 +1,13 @@
-//! Object database access for loose objects and packfiles
+//! Object database access for loose objects and packfiles.
 //!
-//! Planned for a later CVX milestone. The public API is intentionally empty
-//! while the repository and object layers are being built.
+//! Reads check loose objects first and then version-2 pack indexes. Writes
+//! create verified loose objects; pack writing belongs to the transport
+//! milestone.
 
 #![forbid(unsafe_code)]
+
+mod loose;
+mod store;
+
+pub use loose::{LooseStore, StoredObject};
+pub use store::ObjectStore;

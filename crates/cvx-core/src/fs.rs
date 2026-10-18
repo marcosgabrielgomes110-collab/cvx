@@ -79,7 +79,7 @@ pub fn remove_dir_all_if_exists(path: &Path) -> Result<()> {
 
 /// Flushes the parent directory entry to disk on Unix.
 #[cfg(unix)]
-fn sync_parent(path: &Path) -> Result<()> {
+pub fn sync_parent(path: &Path) -> Result<()> {
     let Some(parent) = path.parent() else {
         return Ok(());
     };
@@ -88,7 +88,7 @@ fn sync_parent(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn sync_parent(_path: &Path) -> Result<()> {
+pub fn sync_parent(_path: &Path) -> Result<()> {
     Ok(())
 }
 

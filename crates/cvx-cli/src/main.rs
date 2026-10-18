@@ -25,7 +25,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("cvx: fatal: {error}");
-            ExitCode::from(128)
+            ExitCode::from(error.exit_code())
         }
     }
 }
@@ -33,6 +33,10 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init(args) => commands::init::run(args),
+        Command::Add(args) => commands::add::run(args),
+        Command::Commit(args) => commands::commit::run(args),
+        Command::Status(args) => commands::status::run(args),
+        Command::Log(args) => commands::log::run(args),
         Command::Version => {
             commands::version::run();
             Ok(())

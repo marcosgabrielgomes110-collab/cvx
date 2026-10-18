@@ -1,10 +1,14 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use cvx_config::Config;
 use cvx_core::{Error, IoResultExt, Result};
-use cvx_object::HashAlgorithm;
+use cvx_index::Index;
+use cvx_object::{Commit, HashAlgorithm, ObjectId, ObjectKind, Tree};
+use cvx_odb::{ObjectStore, StoredObject};
 use cvx_ref::{Head, RefStore};
 
 /// Name of the CVX control directory.
@@ -40,12 +44,22 @@ impl RepositoryKind {
     }
 }
 
+/// A non-tree leaf in a recursively expanded tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeLeaf {
+    /// File or link mode.
+    pub mode: u32,
+    /// Referenced blob or gitlink.
+    pub oid: ObjectId,
+}
+
 /// An opened repository.
 #[derive(Debug, Clone)]
 pub struct Repository {
     control_dir: PathBuf,
     work_tree: PathBuf,
     kind: RepositoryKind,
+    objects: Rc<ObjectStore>,
 }
 
 impl Repository {
@@ -128,10 +142,12 @@ impl Repository {
             RepositoryKind::Git
         };
 
+        let objects = Rc::new(ObjectStore::open(control_dir.join("objects"))?);
         let repository = Self {
             control_dir,
             work_tree,
             kind,
+            objects,
         };
         repository.validate_format()?;
         Ok(repository)
@@ -181,6 +197,129 @@ impl Repository {
             }
             None => Ok(HashAlgorithm::Sha1),
         }
+    }
+
+    /// Returns the object database for this repository.
+    pub fn objects(&self) -> &ObjectStore {
+        &self.objects
+    }
+
+    /// Returns the path to the index file.
+    pub fn index_path(&self) -> PathBuf {
+        self.control_dir.join("index")
+    }
+
+    /// Reads the index, returning an empty index when it does not exist.
+    pub fn read_index(&self) -> Result<Index> {
+        Ok(Index::read_from(&self.index_path())?.unwrap_or_default())
+    }
+
+    /// Reads and verifies an object.
+    pub fn read_object(&self, oid: ObjectId) -> Result<StoredObject> {
+        self.objects().read(oid)
+    }
+
+    /// Reads and parses a commit object.
+    pub fn read_commit(&self, oid: ObjectId) -> Result<Commit> {
+        let object = self.read_object(oid)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(Error::corrupt(format!(
+                "object {oid} is a {}, not a commit",
+                object.kind
+            )));
+        }
+        Commit::parse(&object.data)
+    }
+
+    /// Reads and parses a tree object.
+    pub fn read_tree(&self, oid: ObjectId) -> Result<Tree> {
+        let object = self.read_object(oid)?;
+        if object.kind != ObjectKind::Tree {
+            return Err(Error::corrupt(format!(
+                "object {oid} is a {}, not a tree",
+                object.kind
+            )));
+        }
+        Tree::parse(&object.data)
+    }
+
+    /// Reads `HEAD`'s commit, if the current branch has one.
+    pub fn head_commit(&self) -> Result<Option<Commit>> {
+        let Some(oid) = self.head()?.oid() else {
+            return Ok(None);
+        };
+        Ok(Some(self.read_commit(oid)?))
+    }
+
+    /// Recursively expands a tree into path-to-leaf entries.
+    pub fn read_tree_recursive(&self, oid: ObjectId) -> Result<BTreeMap<Vec<u8>, TreeLeaf>> {
+        let mut leaves = BTreeMap::new();
+        self.expand_tree(oid, &[], &mut leaves, 0)?;
+        Ok(leaves)
+    }
+
+    fn expand_tree(
+        &self,
+        oid: ObjectId,
+        prefix: &[u8],
+        leaves: &mut BTreeMap<Vec<u8>, TreeLeaf>,
+        depth: usize,
+    ) -> Result<()> {
+        if depth > 64 {
+            return Err(Error::corrupt("tree nesting is too deep"));
+        }
+
+        for entry in self.read_tree(oid)?.entries() {
+            let mut path = prefix.to_vec();
+            if !path.is_empty() {
+                path.push(b'/');
+            }
+            path.extend_from_slice(&entry.name);
+
+            if entry.is_tree() {
+                self.expand_tree(entry.oid, &path, leaves, depth + 1)?;
+            } else {
+                leaves.insert(
+                    path,
+                    TreeLeaf {
+                        mode: entry.mode,
+                        oid: entry.oid,
+                    },
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Returns the short current branch name, if `HEAD` is symbolic.
+    pub fn branch_name(&self) -> Result<Option<String>> {
+        Ok(self
+            .head()?
+            .target()
+            .and_then(|target| target.strip_prefix("refs/heads/"))
+            .map(str::to_owned))
+    }
+
+    /// Resolves a configuration value, preferring the local repository.
+    pub fn config_value(&self, key: &str) -> Result<Option<String>> {
+        if let Some(value) = self.config()?.get(key) {
+            return Ok(Some(value.to_owned()));
+        }
+        Ok(cvx_config::load_global()?.get(key).map(str::to_owned))
+    }
+
+    /// Resolves a boolean configuration value, preferring the local repository.
+    pub fn config_bool(&self, key: &str) -> Result<Option<bool>> {
+        if let Some(value) = self.config()?.get_bool(key)? {
+            return Ok(Some(value));
+        }
+        cvx_config::load_global()?.get_bool(key)
+    }
+
+    /// Returns whether executable bits should be honored.
+    pub fn filemode(&self) -> Result<bool> {
+        Ok(self.config_bool("core.filemode")?.unwrap_or(cfg!(unix)))
     }
 
     fn validate_format(&self) -> Result<()> {

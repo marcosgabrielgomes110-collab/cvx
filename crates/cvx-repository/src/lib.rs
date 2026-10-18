@@ -8,8 +8,19 @@
 
 #![forbid(unsafe_code)]
 
+mod add;
+mod commit;
 mod init;
+mod log;
 mod repository;
+mod status;
 
+pub use add::{AddOptions, AddOutcome};
+pub use commit::{CommitOptions, CommitOutcome};
+pub use cvx_object::{ObjectId, Signature};
+pub use cvx_ref::Head;
+pub use cvx_revision::LogEntry;
 pub use init::{InitOptions, InitOutcome, InitStorage};
-pub use repository::{CVX_DIR, GIT_DIR, Repository, RepositoryKind};
+pub use log::LogOptions;
+pub use repository::{CVX_DIR, GIT_DIR, Repository, RepositoryKind, TreeLeaf};
+pub use status::{Status, StatusEntry, StatusKind, StatusOptions, UntrackedEntry};

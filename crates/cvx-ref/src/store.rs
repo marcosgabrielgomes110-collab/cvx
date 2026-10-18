@@ -83,9 +83,6 @@ impl RefStore {
     }
 
     /// Writes a direct reference.
-    ///
-    /// This is a simple replacement used by the first milestone. Reference
-    /// transactions with compare-and-swap will be added with commits.
     pub fn write_ref(&self, name: &str, oid: ObjectId) -> Result<()> {
         cvx_core::refname::validate_ref_name(name)?;
         cvx_core::fs::write_atomic(
@@ -93,6 +90,81 @@ impl RefStore {
             format!("{oid}\n").as_bytes(),
             Some(0o644),
         )
+    }
+
+    /// Writes a detached `HEAD`.
+    pub fn write_head_detached(&self, oid: ObjectId) -> Result<()> {
+        cvx_core::fs::write_atomic(
+            &self.git_dir.join("HEAD"),
+            format!("{oid}\n").as_bytes(),
+            Some(0o644),
+        )
+    }
+
+    /// Updates a reference with compare-and-swap semantics.
+    ///
+    /// `expected_old` is `None` for an unborn branch. The update fails if the
+    /// current value differs, preventing concurrent commits from silently
+    /// overwriting each other.
+    pub fn update_ref(
+        &self,
+        name: &str,
+        new_oid: ObjectId,
+        expected_old: Option<ObjectId>,
+    ) -> Result<()> {
+        cvx_core::refname::validate_ref_name(name)?;
+        let ref_path = self.git_dir.join(name);
+        let lock_path = self.git_dir.join(format!("{name}.lock"));
+
+        if let Some(parent) = lock_path.parent() {
+            cvx_core::fs::ensure_dir(parent)?;
+        }
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    Error::Message(format!(
+                        "unable to create '{}': another process may be updating this reference",
+                        lock_path.display()
+                    ))
+                } else {
+                    Error::io(lock_path.display().to_string(), error)
+                }
+            })?;
+
+        let current = match self.read_ref(name) {
+            Ok(current) => current,
+            Err(error) => {
+                let _ = std::fs::remove_file(&lock_path);
+                return Err(error);
+            }
+        };
+        if current != expected_old {
+            let _ = std::fs::remove_file(&lock_path);
+            return Err(Error::Message(format!(
+                "failed to update '{name}': reference changed concurrently"
+            )));
+        }
+
+        use std::io::Write;
+        let write_result = (|| -> Result<()> {
+            file.write_all(format!("{new_oid}\n").as_bytes())
+                .map_err(|error| Error::io(lock_path.display().to_string(), error))?;
+            file.sync_all()
+                .map_err(|error| Error::io(lock_path.display().to_string(), error))?;
+            drop(file);
+            std::fs::rename(&lock_path, &ref_path)
+                .map_err(|error| Error::io(ref_path.display().to_string(), error))?;
+            cvx_core::fs::sync_parent(&ref_path)
+        })();
+
+        if write_result.is_err() {
+            let _ = std::fs::remove_file(&lock_path);
+        }
+        write_result
     }
 
     fn read_ref_inner(&self, name: &str, depth: usize) -> Result<Option<ObjectId>> {

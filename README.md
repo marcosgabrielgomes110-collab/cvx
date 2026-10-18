@@ -6,8 +6,10 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: early alpha.** Only `cvx init` and `cvx version` are implemented.
-> Commands are announced here as they become usable, never before.
+> **Status: local core alpha.** `cvx init`, `add`, `commit`, `status` and `log`
+> are implemented. Network operations, checkout, merges, tags creation and the
+> GitHub integration are not available yet. Commands are announced here as they
+> become usable, never before.
 
 ## Design decisions
 
@@ -17,9 +19,11 @@ tooling keep working, but the engine does not shell out to the `git` executable.
   Git repositories in `.git/` are opened directly in compatibility mode.
 - **No runtime Git dependency.** The official Git binary is used only as a
   compatibility oracle in tests. Production code never invokes it.
-- **Engine written in Rust.** Parsing, hashing, object storage and references
-  are implemented in this workspace, with primitive crates for SHA-1, zlib,
-  byte strings and command-line parsing.
+- **Engine written in Rust.** Parsing, hashing, object storage, index, refs,
+  packfiles and commit traversal are implemented in this workspace, with
+  primitive crates for SHA-1, zlib, byte strings and command-line parsing.
+- **Loose writes, packed reads.** CVX writes loose objects and reads both loose
+  objects and version-2 packfiles, including delta chains.
 - **SHA-1 first.** Repositories declaring SHA-256 are detected and rejected
   explicitly instead of being opened with mixed identifier widths.
 - **Unsupported means unsupported.** Features outside the current milestone
@@ -28,16 +32,34 @@ tooling keep working, but the engine does not shell out to the `git` executable.
 ## Quick start
 
 ```console
-$ cargo run -p cvx-cli -- init /tmp/demo
+$ cargo build --workspace
+$ ./target/debug/cvx init /tmp/demo
 Initialized empty CVX repository in /tmp/demo/.cvx/
-
 $ cd /tmp/demo
-$ git --git-dir=.cvx --work-tree=. status
+$ printf 'hello\n' > hello.txt
+$ cvx add .
+$ cvx status
 On branch main
 
 No commits yet
 
-nothing to commit (create/copy files and use "git add" to track)
+Changes to be committed:
+  (use "cvx add <file>..." to update what will be committed)
+        new file:     hello.txt
+
+$ cvx commit -m "feat: first commit"
+[main (root-commit) 1c2d3e4] feat: first commit
+
+$ cvx log --oneline
+1c2d3e4 feat: first commit
+```
+
+The same repository can be inspected with Git:
+
+```console
+$ git --git-dir=.cvx --work-tree=. status
+$ git --git-dir=.cvx --work-tree=. fsck --strict
+$ git --git-dir=.cvx --work-tree=. log
 ```
 
 The `.cvx/` directory is hidden from Git's status by `.cvx/info/exclude`, so a
@@ -55,6 +77,20 @@ Existing Git repositories are detected automatically:
 $ cvx init
 Detected existing Git repository in /path/to/repo/.git/; CVX will use it in compatibility mode
 ```
+
+Existing `.git/` repositories can be read, modified and committed to directly,
+including repositories whose objects have been packed by `git gc`.
+
+## Commands
+
+| Command | Notes |
+| --- | --- |
+| `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--quiet` |
+| `cvx add <PATH>...` | `-A/--all`, `-u/--update`, `-f/--force` |
+| `cvx commit -m <MSG>` | Repeat `-m` for paragraphs; `--allow-empty` |
+| `cvx status` | `--porcelain`, `--short`, `--untracked-files=no\|normal\|all` |
+| `cvx log [REVISION]` | `--oneline`, `-n/--max-count` |
+| `cvx version` | Engine and repository format information |
 
 ## Workspace
 
@@ -87,10 +123,14 @@ does not.
 See [docs/compatibility.md](docs/compatibility.md) for the current matrix and
 [docs/architecture/overview.md](docs/architecture/overview.md) for the design.
 
-The first milestone targets `init`, `add`, `commit`, `status` and `log`,
-including reading Git packfiles and `packed-refs`. Network operations, checkout,
-merges, submodules, LFS, SHA-256 repositories and reftable storage are out of
-scope for now.
+Implemented compatibility includes loose objects, version-2 packfiles with
+delta chains, index versions 2 through 4 (writing version 2, or 3 when extended
+flags are needed), loose and packed refs, reflogs, annotated tag peeling,
+`.gitignore` rules and worktree status.
+
+Not implemented yet: clone/fetch/push, checkout, branch creation, merge, diff,
+tags creation, SHA-256 repositories, reftable, submodules, LFS, hooks, commit
+signing, `.gitattributes`, CRLF normalization and binary pack writing.
 
 ## License
 

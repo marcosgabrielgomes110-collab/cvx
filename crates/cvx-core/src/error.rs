@@ -41,6 +41,20 @@ pub enum Error {
         message: String,
     },
 
+    /// An object was requested but is not present in the object database.
+    #[error("object not found: {oid}")]
+    ObjectNotFound {
+        /// Missing object identifier.
+        oid: String,
+    },
+
+    /// The requested operation has no changes to record.
+    #[error("{message}")]
+    NothingToCommit {
+        /// Human-readable explanation.
+        message: String,
+    },
+
     /// A configuration file could not be parsed or interpreted.
     #[error("configuration error in {path}: {message}")]
     Config {
@@ -90,6 +104,26 @@ impl Error {
     pub fn corrupt(message: impl Into<String>) -> Self {
         Self::Corrupt {
             message: message.into(),
+        }
+    }
+
+    /// Creates a missing-object error.
+    pub fn object_not_found(oid: impl Into<String>) -> Self {
+        Self::ObjectNotFound { oid: oid.into() }
+    }
+
+    /// Creates a no-changes error.
+    pub fn nothing_to_commit(message: impl Into<String>) -> Self {
+        Self::NothingToCommit {
+            message: message.into(),
+        }
+    }
+
+    /// Returns the process exit code associated with this error.
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Self::NothingToCommit { .. } => 1,
+            _ => 128,
         }
     }
 

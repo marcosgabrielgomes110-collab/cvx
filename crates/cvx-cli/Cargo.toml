@@ -16,6 +16,7 @@ path = "src/main.rs"
 clap = { workspace = true }
 cvx-core = { workspace = true }
 cvx-repository = { workspace = true }
+time = { workspace = true }
 
 [lints]
 workspace = true

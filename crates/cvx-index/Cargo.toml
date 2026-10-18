@@ -11,6 +11,10 @@ publish.workspace = true
 [dependencies]
 cvx-core = { workspace = true }
 cvx-object = { workspace = true }
+sha1 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

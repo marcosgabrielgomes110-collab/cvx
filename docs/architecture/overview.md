@@ -94,8 +94,23 @@ Dependency rules:
 - Crash points will be exercised with test-only failpoints during the first
   milestone's hardening phase.
 
+## Current implementation
+
+The local core implemented in this workspace covers:
+
+- `init`, `add`, `commit`, `status` and `log`;
+- loose object writes and verified reads;
+- version-2 packfiles and indexes, including delta chains;
+- index versions 2 through 4 on input, version-2 writes (or version 3 when
+  extended flags require it);
+- loose refs, packed refs, detached `HEAD`, compare-and-swap ref updates and
+  reflogs;
+- recursive tree building, commit parsing and committer-date history walks;
+- Git-compatible `.gitignore` matching through the `ignore` crate.
+
 ## Non-goals for the first milestone
 
-Network transports, checkout, merges, tags creation, submodules, LFS,
-reftable, SHA-256 repositories, bare repositories and linked worktrees. These
-are explicit errors, not silent no-ops.
+Network transports, checkout, branch creation, merges, diff, tags creation,
+submodules, LFS, reftable, SHA-256 repositories, bare repositories, linked
+worktrees, `.gitattributes`, CRLF normalization, hooks and commit signing.
+These are explicit errors or documented gaps, not silent no-ops.
