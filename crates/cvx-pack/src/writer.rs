@@ -59,6 +59,36 @@ pub fn write_pack(
     let directory = directory.as_ref();
     cvx_core::fs::ensure_dir(directory)?;
 
+    let built = build_pack(inputs)?;
+    let index = build_index(&built.index_entries, built.checksum_bytes);
+    let stem = format!("pack-{}", built.checksum.to_hex());
+    let pack_path = directory.join(format!("{stem}.pack"));
+    let index_path = directory.join(format!("{stem}.idx"));
+    cvx_core::fs::write_atomic(&pack_path, &built.bytes, Some(0o444))?;
+    cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
+
+    Ok(PackWriteOutcome {
+        pack_path,
+        index_path,
+        checksum: built.checksum,
+        objects: built.objects,
+    })
+}
+
+/// Builds a version-2 packfile in memory, without writing an index.
+pub fn encode_pack(inputs: &[PackInput<'_>]) -> Result<Vec<u8>> {
+    Ok(build_pack(inputs)?.bytes)
+}
+
+struct BuiltPack {
+    bytes: Vec<u8>,
+    checksum: ObjectId,
+    checksum_bytes: [u8; CHECKSUM_LEN],
+    objects: Vec<PackedObject>,
+    index_entries: Vec<(ObjectId, u32, u64)>,
+}
+
+fn build_pack(inputs: &[PackInput<'_>]) -> Result<BuiltPack> {
     let mut objects: BTreeMap<ObjectId, (ObjectKind, &[u8])> = BTreeMap::new();
     for input in inputs {
         let oid = hash_object(input.kind, input.data);
@@ -100,23 +130,16 @@ pub fn write_pack(
         index_entries.push((*oid, crc, offset));
     }
 
-    let pack_checksum: [u8; CHECKSUM_LEN] = Sha1::digest(&pack).into();
-    let checksum = ObjectId::from_bytes(pack_checksum);
-    pack.extend_from_slice(&pack_checksum);
+    let checksum_bytes: [u8; CHECKSUM_LEN] = Sha1::digest(&pack).into();
+    let checksum = ObjectId::from_bytes(checksum_bytes);
+    pack.extend_from_slice(&checksum_bytes);
 
-    let index = build_index(&index_entries, pack_checksum);
-
-    let stem = format!("pack-{}", checksum.to_hex());
-    let pack_path = directory.join(format!("{stem}.pack"));
-    let index_path = directory.join(format!("{stem}.idx"));
-    cvx_core::fs::write_atomic(&pack_path, &pack, Some(0o444))?;
-    cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
-
-    Ok(PackWriteOutcome {
-        pack_path,
-        index_path,
+    Ok(BuiltPack {
+        bytes: pack,
         checksum,
+        checksum_bytes,
         objects: packed,
+        index_entries,
     })
 }
 

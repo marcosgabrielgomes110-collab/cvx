@@ -26,8 +26,9 @@ Security-sensitive areas include:
 - path traversal and symlink handling during `restore`, `checkout` and
   `switch`;
 - ref-name and configuration parsing;
-- credential and token handling once network transports exist;
-- decompression and delta-chain resource limits.
+- HTTPS protocol framing, redirects and token handling;
+- credential storage permissions and secret leakage;
+- decompression, pack ingestion and delta-chain resource limits.
 
 ## Design commitments
 
@@ -37,6 +38,11 @@ Security-sensitive areas include:
 - Decompression and delta recursion are bounded.
 - Commits, refs and index writes use lock files and atomic replacement.
 - Credentials must never be written to logs or repository files.
+- Stored credentials use a user-only file (`0600` on Unix) outside the
+  repository; insecure permissions are rejected on read.
+- HTTP redirects are not followed for authenticated transport requests.
+- Tokens are read from standard input or environment variables, not command
+  line arguments.
 
 ## Disclosure
 

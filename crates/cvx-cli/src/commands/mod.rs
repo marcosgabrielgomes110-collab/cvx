@@ -3,6 +3,7 @@ pub mod branch;
 pub mod checkout;
 pub mod clone;
 pub mod commit;
+pub mod credential;
 pub mod diff;
 pub mod fetch;
 pub mod init;

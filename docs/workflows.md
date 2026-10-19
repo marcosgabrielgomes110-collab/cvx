@@ -154,17 +154,18 @@ sequenceDiagram
     Repo-->>CLI: push outcome
 ```
 
-## Planned network clone/push
+## HTTPS clone and push
 
-HTTPS and SSH reuse the same repository-level flows once protocol v2 response
-parsing and transport streams are implemented.
+HTTPS uses protocol v2 upload-pack for clone/fetch and receive-pack for push.
+Credentials come from the environment or the user-only credential file and are
+never stored in the repository. SSH is still planned.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Dev
     participant CVX
-    participant Remote as Git server / GitHub
+    participant Remote as GitHub / Git server
 
     Dev->>CVX: cvx clone URL
     CVX->>Remote: discover refs and capabilities

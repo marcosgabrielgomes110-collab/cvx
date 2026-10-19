@@ -107,9 +107,10 @@ The local workflow implemented in this workspace covers:
 - three-way merges, conflict markers, index stages 1/2/3, merge commits with
   two parents and `merge --abort`/`--continue`;
 - annotated and lightweight tags, `log --decorate` and rename detection;
-- version-2 pack writing and pack-index generation;
-- local-path clone, fetch, push and remote configuration;
-- protocol v2 pkt-line and request builders;
+- version-2 pack writing, pack ingestion and pack-index generation;
+- clone, fetch and push over local paths, `file://` and `https://`;
+- protocol v2 pkt-line, request/response parsing and receive-pack push;
+- HTTPS token authentication and secure user-only credential storage;
 - loose object writes and verified reads;
 - version-2 packfiles and indexes, including delta chains;
 - index versions 2 through 4 on input, version-2 writes (or version 3 when
@@ -125,7 +126,7 @@ the system, crate graph, object model and workflows.
 
 ## Non-goals for the current milestone
 
-Network transports, reset, revert, cherry-pick, submodules, LFS, reftable,
-SHA-256 repositories, bare repositories, linked worktrees, `.gitattributes`,
-CRLF normalization, hooks and commit signing. These are explicit errors or
-documented gaps, not silent no-ops.
+SSH transport, OS keychain integration, GitHub API/OAuth, reset, revert,
+cherry-pick, submodules, LFS, reftable, SHA-256 repositories, bare repositories,
+linked worktrees, `.gitattributes`, CRLF normalization, hooks and commit
+signing. These are explicit errors or documented gaps, not silent no-ops.

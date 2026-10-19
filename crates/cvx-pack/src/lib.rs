@@ -8,9 +8,11 @@
 
 mod delta;
 mod idx;
+mod ingest;
 mod pack;
 mod writer;
 
 pub use delta::apply_delta;
+pub use ingest::{IngestedObject, ingest_pack};
 pub use pack::{Pack, PackObject};
-pub use writer::{PackInput, PackWriteOutcome, PackedObject, write_pack};
+pub use writer::{PackInput, PackWriteOutcome, PackedObject, encode_pack, write_pack};

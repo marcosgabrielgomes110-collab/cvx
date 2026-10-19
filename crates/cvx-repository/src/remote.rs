@@ -6,6 +6,7 @@ use cvx_core::{Error, IoResultExt, Result};
 use cvx_index::IndexLock;
 use cvx_object::ObjectId;
 use cvx_pack::PackInput;
+use cvx_transport::{HttpTransport, PushCommand};
 
 use crate::init::{InitOptions, InitStorage};
 use crate::repository::{CVX_DIR, GIT_DIR, Repository};
@@ -147,8 +148,11 @@ impl Repository {
             .map(str::to_owned))
     }
 
-    /// Clones a local repository into a new directory.
+    /// Clones a repository into a new directory.
     pub fn clone_local(options: &CloneOptions) -> Result<CloneOutcome> {
+        if is_http_url(&options.url) {
+            return Self::clone_http(options);
+        }
         let source = open_local_remote(&options.url)?;
         let source_url = source
             .control_dir()
@@ -222,56 +226,95 @@ impl Repository {
         cvx_pack::write_pack(repository.control_dir().join("objects/pack"), &inputs)?;
 
         let repository = Repository::open(repository.control_dir())?;
-        let remote_name = DEFAULT_REMOTE;
-
-        for (reference, oid) in &heads {
-            let Some(name) = reference.strip_prefix("refs/heads/") else {
-                continue;
-            };
-            repository.refs().update_ref(
-                &format!("refs/remotes/{remote_name}/{name}"),
-                *oid,
-                None,
-            )?;
-        }
-        repository.refs().write_ref_symbolic(
-            &format!("refs/remotes/{remote_name}/HEAD"),
-            &format!("refs/remotes/{remote_name}/{branch}"),
-        )?;
-        repository
-            .refs()
-            .update_ref(&format!("refs/heads/{branch}"), head, None)?;
-        for (reference, oid) in &tags {
-            let Some(name) = reference.strip_prefix("refs/tags/") else {
-                continue;
-            };
-            repository
-                .refs()
-                .update_ref(&format!("refs/tags/{name}"), *oid, None)?;
-        }
-
-        let snapshot = repository.tree_snapshot_for_commit(head)?;
-        let filemode = repository.filemode()?;
-        repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
-        let index = repository.index_from_tree(&snapshot, filemode)?;
-        let lock = IndexLock::acquire(repository.control_dir())?;
-        lock.commit(&index)?;
-
-        repository.append_config(&format!(
-            "\n[remote \"{remote_name}\"]\n\turl = {}\n\tfetch = +refs/heads/*:refs/remotes/{remote_name}/*\n",
-            source_url.replace('\n', "")
-        ))?;
-        repository.append_config(&format!(
-            "\n[branch \"{branch}\"]\n\tremote = {remote_name}\n\tmerge = refs/heads/{branch}\n"
-        ))?;
-
-        Ok(CloneOutcome {
+        finish_clone(
             repository,
-            branch,
+            &heads,
+            &tags,
+            &branch,
             head,
-            object_count: objects.len(),
-            remote: source_url,
-        })
+            objects.len(),
+            &source_url,
+        )
+    }
+
+    fn clone_http(options: &CloneOptions) -> Result<CloneOutcome> {
+        ensure_empty_destination(&options.directory)?;
+        let transport = HttpTransport::open(&options.url)?;
+        let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
+
+        let mut heads = BTreeMap::new();
+        let mut tags = BTreeMap::new();
+        for reference in &refs.refs {
+            if reference.name.starts_with("refs/heads/") {
+                heads.insert(reference.name.clone(), reference.oid);
+            } else if reference.name.starts_with("refs/tags/") {
+                tags.insert(reference.name.clone(), reference.oid);
+            }
+        }
+        if heads.is_empty() {
+            return Err(Error::Message(
+                "cannot clone a repository without commits".to_owned(),
+            ));
+        }
+
+        let branch = match &options.branch {
+            Some(branch) => branch.clone(),
+            None => refs
+                .head_symref
+                .as_deref()
+                .and_then(|target| target.strip_prefix("refs/heads/"))
+                .filter(|branch| heads.contains_key(&format!("refs/heads/{branch}")))
+                .map(str::to_owned)
+                .or_else(|| {
+                    heads
+                        .keys()
+                        .next()
+                        .and_then(|reference| reference.strip_prefix("refs/heads/"))
+                        .map(str::to_owned)
+                })
+                .ok_or_else(|| Error::Message("remote has no branches".to_owned()))?,
+        };
+        let head = *heads
+            .get(&format!("refs/heads/{branch}"))
+            .ok_or_else(|| Error::Message(format!("remote branch '{branch}' does not exist")))?;
+
+        let mut wants: Vec<ObjectId> = heads.values().copied().collect();
+        wants.extend(tags.values().copied());
+        for reference in &refs.refs {
+            if let Some(peeled) = reference.peeled {
+                wants.push(peeled);
+            }
+        }
+        wants.sort_unstable();
+        wants.dedup();
+
+        let pack = transport.fetch(&wants)?;
+        let objects = cvx_pack::ingest_pack(&pack)?;
+
+        let init = Repository::init(InitOptions {
+            directory: options.directory.clone(),
+            initial_branch: Some(branch.clone()),
+            storage: options.storage,
+            quiet: true,
+        })?;
+        let repository = match init {
+            crate::InitOutcome::Created(repository)
+            | crate::InitOutcome::Reinitialized(repository)
+            | crate::InitOutcome::ExistingGit(repository) => repository,
+        };
+        for object in &objects {
+            repository.objects().write(object.kind, &object.data)?;
+        }
+
+        finish_clone(
+            repository,
+            &heads,
+            &tags,
+            &branch,
+            head,
+            objects.len(),
+            transport.base_url(),
+        )
     }
 
     /// Fetches branches and tags from a configured local remote.
@@ -280,6 +323,9 @@ impl Repository {
         let url = self
             .remote_url(remote_name)?
             .ok_or_else(|| Error::Message(format!("remote '{remote_name}' is not configured")))?;
+        if is_http_url(&url) {
+            return self.fetch_http(remote_name, &url);
+        }
         let source = open_local_remote(&url)?;
 
         let heads = source.refs().list_refs("refs/heads")?;
@@ -353,6 +399,102 @@ impl Repository {
         })
     }
 
+    fn fetch_http(&self, remote_name: &str, url: &str) -> Result<FetchOutcome> {
+        let transport = HttpTransport::open(url)?;
+        let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
+
+        let mut heads = BTreeMap::new();
+        let mut tags = BTreeMap::new();
+        for reference in &refs.refs {
+            if reference.name.starts_with("refs/heads/") {
+                heads.insert(reference.name.clone(), reference.oid);
+            } else if reference.name.starts_with("refs/tags/") {
+                tags.insert(reference.name.clone(), reference.oid);
+            }
+        }
+
+        let mut wants: Vec<ObjectId> = heads.values().copied().collect();
+        wants.extend(tags.values().copied());
+        for reference in &refs.refs {
+            if let Some(peeled) = reference.peeled {
+                wants.push(peeled);
+            }
+        }
+        wants.sort_unstable();
+        wants.dedup();
+
+        let mut copied = 0;
+        if !wants.is_empty() {
+            let pack = transport.fetch(&wants)?;
+            for object in cvx_pack::ingest_pack(&pack)? {
+                if !self.objects().contains(object.oid)? {
+                    self.objects().write(object.kind, &object.data)?;
+                    copied += 1;
+                }
+            }
+        }
+
+        let mut updated = Vec::new();
+        for (reference, oid) in &heads {
+            let Some(name) = reference.strip_prefix("refs/heads/") else {
+                continue;
+            };
+            let tracking = format!("refs/remotes/{remote_name}/{name}");
+            let previous = self.refs().read_ref(&tracking)?;
+            self.refs().update_ref(&tracking, *oid, previous)?;
+            updated.push((tracking, *oid));
+        }
+
+        let mut copied_tags = 0;
+        for (reference, oid) in &tags {
+            let Some(name) = reference.strip_prefix("refs/tags/") else {
+                continue;
+            };
+            if self
+                .refs()
+                .read_ref(&format!("refs/tags/{name}"))?
+                .is_none()
+            {
+                self.refs()
+                    .update_ref(&format!("refs/tags/{name}"), *oid, None)?;
+                copied_tags += 1;
+            }
+        }
+
+        if let Some(head) = refs
+            .head_symref
+            .as_deref()
+            .and_then(|target| target.strip_prefix("refs/heads/"))
+        {
+            let _ = self.refs().write_ref_symbolic(
+                &format!("refs/remotes/{remote_name}/HEAD"),
+                &format!("refs/remotes/{remote_name}/{head}"),
+            );
+        }
+
+        let mut fetch_head = String::new();
+        for (reference, oid) in &heads {
+            if let Some(name) = reference.strip_prefix("refs/heads/") {
+                fetch_head.push_str(&format!(
+                    "{oid}\t\tbranch '{name}' of {}\n",
+                    transport.base_url()
+                ));
+            }
+        }
+        cvx_core::fs::write_atomic(
+            &self.control_dir().join("FETCH_HEAD"),
+            fetch_head.as_bytes(),
+            Some(0o644),
+        )?;
+
+        Ok(FetchOutcome {
+            remote: remote_name.to_owned(),
+            updated,
+            objects: copied,
+            tags: copied_tags,
+        })
+    }
+
     /// Pushes a branch to a configured local remote.
     pub fn push(&self, options: &PushOptions) -> Result<PushOutcome> {
         let remote_name = options.remote.as_deref().unwrap_or(DEFAULT_REMOTE);
@@ -371,6 +513,9 @@ impl Repository {
         let url = self
             .remote_url(remote_name)?
             .ok_or_else(|| Error::Message(format!("remote '{remote_name}' is not configured")))?;
+        if is_http_url(&url) {
+            return self.push_http(options, remote_name, &branch, tip, &url);
+        }
         let remote = open_local_remote(&url)?;
         let old = remote.refs().read_ref(&reference)?;
 
@@ -421,6 +566,64 @@ impl Repository {
         })
     }
 
+    fn push_http(
+        &self,
+        options: &PushOptions,
+        remote_name: &str,
+        branch: &str,
+        tip: ObjectId,
+        url: &str,
+    ) -> Result<PushOutcome> {
+        let transport = HttpTransport::open(url)?;
+        let advertisement = transport.discover_receive_pack()?;
+        let reference = format!("refs/heads/{branch}");
+        let old = advertisement
+            .refs
+            .iter()
+            .find(|remote| remote.name == reference)
+            .map(|remote| remote.oid);
+
+        if let Some(old) = old
+            && old != tip
+            && !options.force
+            && self.objects().contains(old)?
+            && !cvx_revision::is_ancestor(old, tip, |oid| self.read_commit(oid))?
+        {
+            return Err(Error::Message(format!(
+                "updates were rejected because '{branch}' is not a fast-forward; use --force"
+            )));
+        }
+
+        let objects = self.reachable_objects(&[tip])?;
+        let mut contents = Vec::with_capacity(objects.len());
+        for oid in &objects {
+            let object = self.read_object(*oid)?;
+            contents.push((object.kind, object.data));
+        }
+        let inputs: Vec<PackInput<'_>> = contents
+            .iter()
+            .map(|(kind, data)| PackInput { kind: *kind, data })
+            .collect();
+        let pack = cvx_pack::encode_pack(&inputs)?;
+
+        transport.push(
+            &[PushCommand {
+                old,
+                new: tip,
+                reference,
+            }],
+            &pack,
+        )?;
+
+        Ok(PushOutcome {
+            remote: remote_name.to_owned(),
+            branch: branch.to_owned(),
+            old,
+            new: tip,
+            objects: objects.len(),
+        })
+    }
+
     fn append_config(&self, text: &str) -> Result<()> {
         let path = self.control_dir().join("config");
         let mut file = std::fs::OpenOptions::new()
@@ -431,6 +634,84 @@ impl Repository {
         file.write_all(text.as_bytes()).path_context(&path)?;
         file.flush().path_context(&path)
     }
+}
+
+fn finish_clone(
+    repository: Repository,
+    heads: &BTreeMap<String, ObjectId>,
+    tags: &BTreeMap<String, ObjectId>,
+    branch: &str,
+    head: ObjectId,
+    object_count: usize,
+    remote_url: &str,
+) -> Result<CloneOutcome> {
+    let remote_name = DEFAULT_REMOTE;
+
+    for (reference, oid) in heads {
+        let Some(name) = reference.strip_prefix("refs/heads/") else {
+            continue;
+        };
+        repository
+            .refs()
+            .update_ref(&format!("refs/remotes/{remote_name}/{name}"), *oid, None)?;
+    }
+    repository.refs().write_ref_symbolic(
+        &format!("refs/remotes/{remote_name}/HEAD"),
+        &format!("refs/remotes/{remote_name}/{branch}"),
+    )?;
+    repository
+        .refs()
+        .update_ref(&format!("refs/heads/{branch}"), head, None)?;
+    for (reference, oid) in tags {
+        let Some(name) = reference.strip_prefix("refs/tags/") else {
+            continue;
+        };
+        repository
+            .refs()
+            .update_ref(&format!("refs/tags/{name}"), *oid, None)?;
+    }
+
+    let snapshot = repository.tree_snapshot_for_commit(head)?;
+    let filemode = repository.filemode()?;
+    repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
+    let index = repository.index_from_tree(&snapshot, filemode)?;
+    let lock = IndexLock::acquire(repository.control_dir())?;
+    lock.commit(&index)?;
+
+    repository.append_config(&format!(
+        "\n[remote \"{remote_name}\"]\n\turl = {}\n\tfetch = +refs/heads/*:refs/remotes/{remote_name}/*\n",
+        remote_url.replace('\n', "")
+    ))?;
+    repository.append_config(&format!(
+        "\n[branch \"{branch}\"]\n\tremote = {remote_name}\n\tmerge = refs/heads/{branch}\n"
+    ))?;
+
+    Ok(CloneOutcome {
+        repository,
+        branch: branch.to_owned(),
+        head,
+        object_count,
+        remote: remote_url.to_owned(),
+    })
+}
+
+fn ensure_empty_destination(directory: &Path) -> Result<()> {
+    if directory.exists()
+        && std::fs::read_dir(directory)
+            .map_err(|error| Error::io(directory.display().to_string(), error))?
+            .next()
+            .is_some()
+    {
+        return Err(Error::Message(format!(
+            "destination '{}' already exists and is not empty",
+            directory.display()
+        )));
+    }
+    Ok(())
+}
+
+fn is_http_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
 }
 
 fn open_local_remote(url: &str) -> Result<Repository> {

@@ -37,6 +37,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Remote(args) => commands::remote::run(args),
         Command::Fetch(args) => commands::fetch::run(args),
         Command::Push(args) => commands::push::run(args),
+        Command::Credential(args) => commands::credential::run(args),
         Command::Add(args) => commands::add::run(args),
         Command::Commit(args) => commands::commit::run(args),
         Command::Status(args) => commands::status::run(args),

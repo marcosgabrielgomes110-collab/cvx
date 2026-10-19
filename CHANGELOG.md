@@ -14,8 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local-path and `file://` transport: `cvx clone`, `cvx fetch` and `cvx push`.
 - `cvx remote` listing and `cvx remote add`, plus `refs/remotes/*` tracking
   branches, `FETCH_HEAD` and remote `HEAD` symbols.
-- Protocol v2 pkt-line framing, capability parsing and `ls-refs`/`fetch`
-  request builders in `cvx-protocol`.
+- Protocol v2 pkt-line framing, capability/response parsing and
+  `ls-refs`/`fetch` request builders in `cvx-protocol`.
+- HTTPS smart transport with protocol v2 clone/fetch, receive-pack push and
+  pack ingestion.
+- `cvx credential store|list|remove` with a user-only (`0600`) credential file
+  outside the repository; tokens are read from stdin and never printed.
 - `cvx merge` with fast-forward and three-way merges, including merge commits
   with two parents.
 - Conflict markers in the worktree, index stages 1/2/3 and precise porcelain

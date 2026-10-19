@@ -29,10 +29,10 @@ flowchart TB
         Worktree --> Ignore["cvx-ignore"]
     end
 
-    subgraph Remote["Remote (planned)"]
-        Transport["cvx-transport<br/>SSH / HTTPS"]
+    subgraph Remote["Remote transport (HTTPS implemented, SSH planned)"]
+        Transport["cvx-transport<br/>HTTPS / SSH"]
         Protocol["cvx-protocol<br/>Git wire protocol"]
-        Credential["cvx-credential"]
+        Credential["cvx-credential<br/>secure token store"]
         Transport --> Protocol
         Transport --> Credential
     end
@@ -43,7 +43,7 @@ flowchart TB
         Flow --> API
     end
 
-    Repo -.-> Transport
+    Repo --> Transport
     Flow -.-> Repo
 ```
 
@@ -69,6 +69,9 @@ flowchart LR
     Worktree["cvx-worktree"]
     Diff["cvx-diff"]
     Repo["cvx-repository"]
+    Transport["cvx-transport"]
+    Protocol["cvx-protocol"]
+    Credential["cvx-credential"]
     CLI["cvx-cli"]
     Testkit["cvx-testkit"]
 
@@ -96,6 +99,10 @@ flowchart LR
     Repo --> Worktree
     Repo --> Diff
     Repo --> Config
+    Repo --> Transport
+    Transport --> Protocol
+    Transport --> Credential
+    Transport --> Core
     CLI --> Repo
     Testkit --> Repo
 ```

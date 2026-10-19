@@ -37,6 +37,9 @@ pub enum Command {
     /// Update a remote branch.
     Push(PushArgs),
 
+    /// Manage securely stored credentials.
+    Credential(CredentialArgs),
+
     /// Add file contents to the index.
     Add(AddArgs),
 
@@ -162,6 +165,36 @@ pub struct PushArgs {
     /// Allow non-fast-forward updates.
     #[arg(short, long)]
     pub force: bool,
+}
+
+/// Arguments for `cvx credential`.
+#[derive(Debug, clap::Args)]
+pub struct CredentialArgs {
+    /// Credential operation.
+    #[command(subcommand)]
+    pub command: CredentialCommand,
+}
+
+/// Credential subcommands.
+#[derive(Debug, Subcommand)]
+pub enum CredentialCommand {
+    /// Store a token read from standard input.
+    Store {
+        /// Host name, such as github.com.
+        #[arg(value_name = "HOST")]
+        host: String,
+        /// Username or token account name.
+        #[arg(long, default_value = "x-access-token")]
+        username: String,
+    },
+    /// List hosts with stored credentials.
+    List,
+    /// Remove a stored credential.
+    Remove {
+        /// Host name, such as github.com.
+        #[arg(value_name = "HOST")]
+        host: String,
+    },
 }
 
 /// Arguments for `cvx add`.

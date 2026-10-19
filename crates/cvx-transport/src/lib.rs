@@ -1,6 +1,14 @@
-//! SSH and HTTPS Git transports
+//! HTTPS Git transport.
 //!
-//! Planned for a later CVX milestone. The public API is intentionally empty
-//! while the repository and object layers are being built.
+//! The local filesystem transport lives in `cvx-repository`; this crate speaks
+//! the Git smart HTTP protocol for HTTPS repositories. SSH is not implemented
+//! yet.
 
 #![forbid(unsafe_code)]
+
+mod http;
+
+pub use http::{
+    HttpTransport, LsRefsResponse, PushCommand, PushRefStatus, PushReport,
+    ReceivePackAdvertisement, RemoteRef,
+};

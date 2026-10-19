@@ -89,9 +89,14 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Merge commits and conflicted index stages | Yes |
 | Annotated and lightweight tags | Yes |
 | Pack writing | Yes | Complete objects and version-2 indexes |
+| Pack ingestion | Yes | Self-contained packs; thin packs are rejected |
 | Clone / fetch / push over local paths | Yes | `file://` and filesystem paths |
-| Clone / fetch / push over HTTPS or SSH | Not implemented | Explicit unsupported-transport error |
-| Credentials and keychain | Not implemented | |
+| Clone / fetch / push over HTTPS | Yes | Protocol v2 fetch, receive-pack push |
+| Clone / fetch / push over SSH | Not implemented | Explicit unsupported-transport error |
+| HTTPS token authentication | Yes | Basic auth via env or credential store |
+| Credential file | Yes | User-only `0600`, outside the repository |
+| OS keychain integration | Not implemented | Planned |
+| Shallow / partial clone | Not implemented | |
 | GitHub API and authentication | Not implemented |
 | Shallow and partial clones | Not implemented |
 | Replace refs and grafts | Not implemented |
