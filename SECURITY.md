@@ -29,6 +29,7 @@ Security-sensitive areas include:
 - HTTPS protocol framing, redirects and token handling;
 - SSH process invocation, host-key policy and remote path quoting;
 - keychain and credential-file storage permissions and secret leakage;
+- GitHub API token handling, request authorization and destructive operations;
 - shallow boundaries and partial-clone lazy object fetching;
 - decompression, pack ingestion and delta-chain resource limits.
 

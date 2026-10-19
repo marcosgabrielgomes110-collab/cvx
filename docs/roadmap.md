@@ -10,7 +10,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
-| 4 | GitHub API, auth, pull requests, issues, releases | Next |
+| 4 | GitHub API, auth, pull requests, issues, releases | In progress — core workflows implemented |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 
 ## Phase 2B — merge and history workflows
@@ -49,11 +49,22 @@ Known limitations:
 
 ## Phase 4 — GitHub
 
-- authentication and token storage;
-- repository creation and permissions;
-- pull requests, reviews and checks;
-- issues and labels;
-- releases and workflow visibility.
+Implemented:
+
+- token authentication through the existing keychain/file credential store;
+- repository creation, deletion and inspection;
+- pull request creation, listing and merge;
+- issue creation, listing and closing;
+- release creation and listing;
+- workflow-run visibility.
+
+Remaining:
+
+- OAuth/device flow and scope management;
+- repository permissions and collaborator management;
+- pull-request reviews and checks;
+- issue labels, milestones and assignees;
+- GraphQL queries and richer release assets.
 
 ## Phase 5 — release quality
 

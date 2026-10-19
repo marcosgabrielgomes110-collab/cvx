@@ -37,14 +37,15 @@ flowchart TB
         Transport --> Credential
     end
 
-    subgraph GitHub["GitHub (planned)"]
-        API["cvx-github-api"]
-        Flow["cvx-github-workflow<br/>PRs, issues, releases"]
+    subgraph GitHub["GitHub (core workflows)"]
+        API["cvx-github-api<br/>REST"]
+        Flow["cvx-github-workflow<br/>repos, issues, PRs, releases"]
         Flow --> API
     end
 
     Repo --> Transport
-    Flow -.-> Repo
+    Flow --> Repo
+    CLI --> Flow
 ```
 
 Solid arrows are implemented dependencies. Dotted arrows are planned
@@ -72,6 +73,8 @@ flowchart LR
     Transport["cvx-transport"]
     Protocol["cvx-protocol"]
     Credential["cvx-credential"]
+    Api["cvx-github-api"]
+    Flow["cvx-github-workflow"]
     CLI["cvx-cli"]
     Testkit["cvx-testkit"]
 
@@ -103,6 +106,11 @@ flowchart LR
     Transport --> Protocol
     Transport --> Credential
     Transport --> Core
+    Api --> Credential
+    Api --> Core
+    Flow --> Api
+    Flow --> Repo
+    CLI --> Flow
     CLI --> Repo
     Testkit --> Repo
 ```

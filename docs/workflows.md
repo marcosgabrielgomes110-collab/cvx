@@ -182,3 +182,29 @@ sequenceDiagram
     Remote-->>CVX: update accepted
     CVX-->>Dev: pushed
 ```
+
+## GitHub workflows
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant CLI as cvx-cli
+    participant Flow as cvx-github-workflow
+    participant API as cvx-github-api
+    participant Git as GitHub
+
+    Dev->>CLI: cvx github login
+    CLI->>CLI: store token in keychain or 0600 file
+    Dev->>CLI: cvx github repo create demo --private --push
+    CLI->>Flow: create_repo_and_push
+    Flow->>API: POST /user/repos
+    API-->>Flow: repository URLs
+    Flow->>Git: push current branch over HTTPS/SSH
+    Dev->>CLI: cvx github pr create "title" --head feature
+    CLI->>Flow: create_pull_request
+    Flow->>API: POST /repos/{owner}/{repo}/pulls
+    API-->>CLI: pull request number and URL
+    Dev->>CLI: cvx github pr merge 2
+    CLI->>API: PUT /repos/{owner}/{repo}/pulls/2/merge
+```

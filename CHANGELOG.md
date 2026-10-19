@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Phase 4 GitHub integration is in progress._
+
+### Added
+
+- `cvx github login|status|logout` with keychain/file credential reuse.
+- GitHub REST client for repositories, issues, pull requests, releases and
+  workflow runs.
+- `cvx github repo create|delete|show`, including repository creation and push.
+- `cvx github issue create|list|close`.
+- `cvx github pr create|list|merge`.
+- `cvx github release create|list` and `cvx github workflows`.
+
+## [0.2.0] - 2026-10-19
+
 ### Added
 
 - Version-2 pack writing with complete objects and matching version-2 indexes.

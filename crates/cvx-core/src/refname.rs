@@ -57,7 +57,7 @@ mod tests {
         for name in [
             "refs/heads/main",
             "refs/heads/feature/auth",
-            "refs/tags/v0.1.0",
+            "refs/tags/v0.2.0",
             "refs/remotes/origin/main",
             "refs/heads/-dash",
             "refs/heads/foo@bar",

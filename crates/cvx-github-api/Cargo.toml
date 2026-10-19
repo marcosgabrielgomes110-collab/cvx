@@ -11,6 +11,9 @@ publish.workspace = true
 [dependencies]
 cvx-core = { workspace = true }
 cvx-credential = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ureq = { workspace = true }
 
 [lints]
 workspace = true

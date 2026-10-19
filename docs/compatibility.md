@@ -101,9 +101,17 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Partial clone | Limited | `--filter=blob:none`; lazy fetch per missing object |
 | Shallow fetch update / unshallow | Not implemented | |
 | Partial clone with arbitrary filters | Limited | `blob:none` is the tested filter |
-| GitHub API and authentication | Not implemented |
-| Shallow and partial clones | Not implemented |
-| Replace refs and grafts | Not implemented |
+| GitHub token authentication | Yes | Keychain or `0600` credential file |
+| GitHub repositories | Yes | Create, delete, show |
+| GitHub issues | Yes | Create, list, close |
+| GitHub pull requests | Yes | Create, list, merge |
+| GitHub reviews and checks | Not implemented | |
+| GitHub labels and milestones | Not implemented | |
+| GitHub releases | Yes | Create, list |
+| GitHub workflow runs | Yes | Read-only listing |
+| GitHub OAuth / device flow | Not implemented | |
+| GraphQL | Not implemented | |
+| Replace refs and grafts | Not implemented | |
 
 ## Test oracle
 

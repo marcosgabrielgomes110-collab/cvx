@@ -40,6 +40,9 @@ pub enum Command {
     /// Manage securely stored credentials.
     Credential(CredentialArgs),
 
+    /// GitHub account, repository and collaboration workflows.
+    Github(GithubArgs),
+
     /// Add file contents to the index.
     Add(AddArgs),
 
@@ -209,6 +212,204 @@ pub enum CredentialCommand {
     Approve,
     /// Git credential-helper `reject` operation.
     Reject,
+}
+
+/// Arguments for `cvx github`.
+#[derive(Debug, clap::Args)]
+pub struct GithubArgs {
+    /// GitHub operation.
+    #[command(subcommand)]
+    pub command: GithubCommand,
+}
+
+/// GitHub subcommands.
+#[derive(Debug, Subcommand)]
+pub enum GithubCommand {
+    /// Store a GitHub token read from standard input.
+    Login,
+    /// Show the authenticated GitHub account.
+    Status,
+    /// Remove the stored GitHub token.
+    Logout,
+    /// Repository operations.
+    Repo {
+        /// Repository operation.
+        #[command(subcommand)]
+        command: GithubRepoCommand,
+    },
+    /// Issue operations.
+    Issue {
+        /// Issue operation.
+        #[command(subcommand)]
+        command: GithubIssueCommand,
+    },
+    /// Pull-request operations.
+    Pr {
+        /// Pull-request operation.
+        #[command(subcommand)]
+        command: GithubPrCommand,
+    },
+    /// Release operations.
+    Release {
+        /// Release operation.
+        #[command(subcommand)]
+        command: GithubReleaseCommand,
+    },
+    /// List recent GitHub Actions workflow runs.
+    Workflows {
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// GitHub repository operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubRepoCommand {
+    /// Create a repository.
+    Create {
+        /// Repository name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Create a private repository.
+        #[arg(long)]
+        private: bool,
+        /// Repository description.
+        #[arg(long, value_name = "TEXT")]
+        description: Option<String>,
+        /// Push the current branch after creating the repository.
+        #[arg(long)]
+        push: bool,
+        /// Branch to push. Defaults to the current branch.
+        #[arg(long, value_name = "BRANCH")]
+        branch: Option<String>,
+    },
+    /// Delete a repository.
+    Delete {
+        /// Repository as owner/name or URL. Defaults to origin.
+        #[arg(value_name = "OWNER/REPO")]
+        repo: Option<String>,
+        /// Confirm deletion.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Show repository information.
+    Show {
+        /// Repository as owner/name or URL. Defaults to origin.
+        #[arg(value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// GitHub issue operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubIssueCommand {
+    /// Create an issue.
+    Create {
+        /// Issue title.
+        #[arg(value_name = "TITLE")]
+        title: String,
+        /// Issue body.
+        #[arg(short, long, value_name = "TEXT")]
+        body: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// List issues.
+    List {
+        /// Issue state: open, closed or all.
+        #[arg(long, default_value = "open", value_name = "STATE")]
+        state: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Close an issue.
+    Close {
+        /// Issue number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// GitHub pull-request operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubPrCommand {
+    /// Create a pull request.
+    Create {
+        /// Pull-request title.
+        #[arg(value_name = "TITLE")]
+        title: String,
+        /// Source branch.
+        #[arg(long, value_name = "BRANCH")]
+        head: String,
+        /// Target branch. Defaults to the repository default branch.
+        #[arg(long, value_name = "BRANCH")]
+        base: Option<String>,
+        /// Pull-request body.
+        #[arg(short, long, value_name = "TEXT")]
+        body: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// List pull requests.
+    List {
+        /// Pull-request state: open, closed or all.
+        #[arg(long, default_value = "open", value_name = "STATE")]
+        state: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Merge a pull request.
+    Merge {
+        /// Pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Merge method: merge, squash or rebase.
+        #[arg(long, default_value = "merge", value_name = "METHOD")]
+        method: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// GitHub release operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubReleaseCommand {
+    /// List releases.
+    List {
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Create a release.
+    Create {
+        /// Tag name.
+        #[arg(value_name = "TAG")]
+        tag: String,
+        /// Release name.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+        /// Release notes.
+        #[arg(short, long, value_name = "TEXT")]
+        body: Option<String>,
+        /// Create a draft release.
+        #[arg(long)]
+        draft: bool,
+        /// Mark the release as a prerelease.
+        #[arg(long)]
+        prerelease: bool,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
 }
 
 /// Arguments for `cvx add`.

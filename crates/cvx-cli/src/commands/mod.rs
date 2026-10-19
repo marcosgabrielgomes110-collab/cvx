@@ -6,6 +6,7 @@ pub mod commit;
 pub mod credential;
 pub mod diff;
 pub mod fetch;
+pub mod github;
 pub mod init;
 pub mod log;
 pub mod merge;

@@ -144,6 +144,18 @@ impl Repository {
         })
     }
 
+    /// Updates a remote's URL, adding the remote when necessary.
+    pub fn set_remote_url(&self, name: &str, url: &str) -> Result<()> {
+        validate_remote_name(name)?;
+        let url = normalize_remote_url(url)?;
+        if self.remote_url(name)?.is_some() {
+            self.append_config(&format!("\n[remote \"{name}\"]\n\turl = {url}\n"))?;
+        } else {
+            self.add_remote(name, &url)?;
+        }
+        Ok(())
+    }
+
     /// Returns a remote's configured URL.
     pub fn remote_url(&self, name: &str) -> Result<Option<String>> {
         Ok(self

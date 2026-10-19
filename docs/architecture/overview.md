@@ -112,6 +112,8 @@ The local workflow implemented in this workspace covers:
 - protocol v2 pkt-line, request/response parsing and receive-pack push;
 - HTTPS token authentication, SSH keys/agent and keychain credentials;
 - credential-helper operations and shallow/partial clones;
+- GitHub token auth, repositories, issues, pull requests, releases and
+  workflow-run listing;
 - loose object writes and verified reads;
 - version-2 packfiles and indexes, including delta chains;
 - index versions 2 through 4 on input, version-2 writes (or version 3 when
@@ -127,7 +129,8 @@ the system, crate graph, object model and workflows.
 
 ## Non-goals for the current milestone
 
-GitHub API/OAuth, shallow fetch updates, reset, revert, cherry-pick, submodules,
+GitHub OAuth, reviews/checks, labels and milestones, GraphQL, shallow fetch
+updates, reset, revert, cherry-pick, submodules,
 LFS, reftable, SHA-256 repositories, bare repositories, linked worktrees,
 `.gitattributes`, CRLF normalization, hooks and commit signing. These are
 explicit errors or documented gaps, not silent no-ops.

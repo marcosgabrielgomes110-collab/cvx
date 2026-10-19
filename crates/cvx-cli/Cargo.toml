@@ -16,6 +16,8 @@ path = "src/main.rs"
 clap = { workspace = true }
 cvx-credential = { workspace = true }
 cvx-core = { workspace = true }
+cvx-github-api = { workspace = true }
+cvx-github-workflow = { workspace = true }
 cvx-repository = { workspace = true }
 time = { workspace = true }
 
