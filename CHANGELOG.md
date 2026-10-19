@@ -19,6 +19,10 @@ _Phase 4 GitHub integration is in progress._
 - `cvx github pr create|list|merge`.
 - `cvx github release create|list` and `cvx github workflows`.
 
+### Fixed
+
+- Windows builds no longer import Unix-only credential helpers.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added
