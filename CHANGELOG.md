@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Phase 4 GitHub integration is in progress._
+_Phase 4 GitHub integration continues._
+
+## [0.2.1] - 2026-10-19
 
 ### Added
 
+- GitHub pull-request reviews: create approvals, change requests and comments,
+  and list reviews.
+- GitHub check-run listing for a commit, ref or local `HEAD`.
+- GitHub labels: create, list, delete, add to and remove from issues/PRs.
 - `cvx github login|status|logout` with keychain/file credential reuse.
 - GitHub REST client for repositories, issues, pull requests, releases and
   workflow runs.
@@ -22,6 +28,10 @@ _Phase 4 GitHub integration is in progress._
 ### Fixed
 
 - Windows builds no longer import Unix-only credential helpers.
+- Remote configuration values are quoted and escaped, fixing Windows paths and
+  URLs with spaces.
+- SCP-like URL detection no longer mistakes Windows absolute or extended paths
+  for SSH remotes.
 
 ## [0.2.0] - 2026-10-19
 

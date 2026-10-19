@@ -6,8 +6,8 @@ use cvx_github_workflow::GitHubWorkflows;
 use cvx_repository::Repository;
 
 use crate::cli::{
-    GithubArgs, GithubCommand, GithubIssueCommand, GithubPrCommand, GithubReleaseCommand,
-    GithubRepoCommand,
+    GithubArgs, GithubCommand, GithubIssueCommand, GithubLabelCommand, GithubPrCommand,
+    GithubReleaseCommand, GithubRepoCommand,
 };
 
 /// Executes `cvx github`.
@@ -147,6 +147,112 @@ pub fn run(args: GithubArgs) -> Result<()> {
                 );
                 Ok(())
             }
+            GithubPrCommand::Reviews { number, repo } => {
+                for review in workflows.list_reviews(repo.as_deref(), number)? {
+                    println!(
+                        "{:<18} {:<20} {} {}",
+                        review.state,
+                        review.user.login,
+                        review.body.unwrap_or_default(),
+                        review.html_url.unwrap_or_default()
+                    );
+                }
+                Ok(())
+            }
+            GithubPrCommand::Review {
+                number,
+                approve,
+                request_changes,
+                comment,
+                body,
+                repo,
+            } => {
+                let event = if approve {
+                    "APPROVE"
+                } else if request_changes {
+                    "REQUEST_CHANGES"
+                } else if comment {
+                    "COMMENT"
+                } else {
+                    return Err(Error::Message(
+                        "choose --approve, --request-changes or --comment".to_owned(),
+                    ));
+                };
+                let review =
+                    workflows.create_review(repo.as_deref(), number, event, body.as_deref())?;
+                println!(
+                    "{} review submitted for PR #{}: {}",
+                    review.state,
+                    number,
+                    review.html_url.unwrap_or_default()
+                );
+                Ok(())
+            }
+        }),
+        GithubCommand::Label { command } => with_workflows(|workflows| match command {
+            GithubLabelCommand::List { repo } => {
+                for label in workflows.labels(repo.as_deref())? {
+                    println!(
+                        "{:<24} #{:<6} {}",
+                        label.name,
+                        label.color,
+                        label.description.unwrap_or_default()
+                    );
+                }
+                Ok(())
+            }
+            GithubLabelCommand::Create {
+                name,
+                color,
+                description,
+                repo,
+            } => {
+                let label = workflows.create_label(
+                    repo.as_deref(),
+                    &name,
+                    &color,
+                    description.as_deref(),
+                )?;
+                println!("Created label {} (#{})", label.name, label.color);
+                Ok(())
+            }
+            GithubLabelCommand::Delete { name, repo } => {
+                workflows.delete_label(repo.as_deref(), &name)?;
+                println!("Deleted label {name}");
+                Ok(())
+            }
+            GithubLabelCommand::Add {
+                number,
+                labels,
+                repo,
+            } => {
+                let labels = workflows.add_labels(repo.as_deref(), number, &labels)?;
+                let names: Vec<&str> = labels.iter().map(|label| label.name.as_str()).collect();
+                println!("#{} labels: {}", number, names.join(", "));
+                Ok(())
+            }
+            GithubLabelCommand::Remove {
+                number,
+                label,
+                repo,
+            } => {
+                let labels = workflows.remove_label(repo.as_deref(), number, &label)?;
+                let names: Vec<&str> = labels.iter().map(|label| label.name.as_str()).collect();
+                println!("#{} labels: {}", number, names.join(", "));
+                Ok(())
+            }
+        }),
+        GithubCommand::Checks { reference, repo } => with_workflows(|workflows| {
+            for check in workflows.check_runs(repo.as_deref(), reference.as_deref())? {
+                println!(
+                    "{:<12} {:<14} {:<30} {}",
+                    check.status,
+                    check.conclusion.unwrap_or_else(|| "-".to_owned()),
+                    check.name,
+                    check.html_url.unwrap_or_default()
+                );
+            }
+            Ok(())
         }),
         GithubCommand::Release { command } => with_workflows(|workflows| match command {
             GithubReleaseCommand::List { repo } => {

@@ -104,6 +104,54 @@ pub struct PullRef {
     pub sha: String,
 }
 
+/// A pull-request review.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Review {
+    /// Review id.
+    pub id: u64,
+    /// `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, etc.
+    pub state: String,
+    /// Review body.
+    #[serde(default)]
+    pub body: Option<String>,
+    /// Author.
+    pub user: Owner,
+    /// Browser URL.
+    #[serde(default)]
+    pub html_url: Option<String>,
+}
+
+/// A GitHub Actions check run.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct CheckRun {
+    /// Check run id.
+    pub id: u64,
+    /// Check name.
+    pub name: String,
+    /// Current status.
+    pub status: String,
+    /// Final conclusion, when complete.
+    #[serde(default)]
+    pub conclusion: Option<String>,
+    /// Commit being checked.
+    pub head_sha: String,
+    /// Browser URL.
+    #[serde(default)]
+    pub html_url: Option<String>,
+}
+
+/// A GitHub label.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Label {
+    /// Label name.
+    pub name: String,
+    /// Hex color without `#`.
+    pub color: String,
+    /// Optional description.
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
 /// GitHub release summary.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Release {
@@ -348,6 +396,170 @@ impl GitHubClient {
         )?)
     }
 
+    /// Lists reviews for a pull request.
+    pub fn list_pull_request_reviews(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+    ) -> Result<Vec<Review>> {
+        self.parse(self.request(
+            "GET",
+            &format!(
+                "/repos/{}/{}/pulls/{number}/reviews?per_page=100",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            None,
+        )?)
+    }
+
+    /// Creates a pull-request review.
+    ///
+    /// `event` is `APPROVE`, `REQUEST_CHANGES` or `COMMENT`.
+    pub fn create_pull_request_review(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        event: &str,
+        body: Option<&str>,
+    ) -> Result<Review> {
+        let event = event.to_ascii_uppercase();
+        if !matches!(event.as_str(), "APPROVE" | "REQUEST_CHANGES" | "COMMENT") {
+            return Err(Error::Message(format!("invalid review event: {event}")));
+        }
+        let payload = json!({ "event": event, "body": body });
+        self.parse(self.request(
+            "POST",
+            &format!(
+                "/repos/{}/{}/pulls/{number}/reviews",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            Some(payload),
+        )?)
+    }
+
+    /// Lists check runs for a commit or ref.
+    pub fn list_check_runs(
+        &self,
+        owner: &str,
+        repo: &str,
+        reference: &str,
+    ) -> Result<Vec<CheckRun>> {
+        let reference = encode_path_segment(reference);
+        let value = self.request(
+            "GET",
+            &format!(
+                "/repos/{}/{}/commits/{reference}/check-runs?per_page=100",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            None,
+        )?;
+        let runs = value
+            .get("check_runs")
+            .and_then(Value::as_array)
+            .ok_or_else(|| Error::corrupt("GitHub check-runs response is missing check_runs"))?;
+        runs.iter()
+            .cloned()
+            .map(|value| {
+                serde_json::from_value(value)
+                    .map_err(|error| Error::corrupt(format!("invalid check run: {error}")))
+            })
+            .collect()
+    }
+
+    /// Lists repository labels.
+    pub fn list_labels(&self, owner: &str, repo: &str) -> Result<Vec<Label>> {
+        self.parse(self.request(
+            "GET",
+            &format!(
+                "/repos/{}/{}/labels?per_page=100",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            None,
+        )?)
+    }
+
+    /// Creates a repository label.
+    pub fn create_label(
+        &self,
+        owner: &str,
+        repo: &str,
+        name: &str,
+        color: &str,
+        description: Option<&str>,
+    ) -> Result<Label> {
+        validate_label_color(color)?;
+        let payload = json!({ "name": name, "color": color, "description": description });
+        self.parse(self.request(
+            "POST",
+            &format!(
+                "/repos/{}/{}/labels",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            Some(payload),
+        )?)
+    }
+
+    /// Deletes a repository label.
+    pub fn delete_label(&self, owner: &str, repo: &str, name: &str) -> Result<()> {
+        let name = encode_path_segment(name);
+        self.request(
+            "DELETE",
+            &format!(
+                "/repos/{}/{}/labels/{name}",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            None,
+        )?;
+        Ok(())
+    }
+
+    /// Adds labels to an issue or pull request.
+    pub fn add_labels(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        labels: &[String],
+    ) -> Result<Vec<Label>> {
+        self.parse(self.request(
+            "POST",
+            &format!(
+                "/repos/{}/{}/issues/{number}/labels",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            Some(json!({ "labels": labels })),
+        )?)
+    }
+
+    /// Removes one label from an issue or pull request.
+    pub fn remove_label(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        label: &str,
+    ) -> Result<Vec<Label>> {
+        let label = encode_path_segment(label);
+        self.parse(self.request(
+            "DELETE",
+            &format!(
+                "/repos/{}/{}/issues/{number}/labels/{label}",
+                validate_name(owner, "owner")?,
+                validate_name(repo, "repository")?
+            ),
+            None,
+        )?)
+    }
+
     /// Merges a pull request.
     pub fn merge_pull_request(
         &self,
@@ -521,6 +733,28 @@ fn validate_name<'a>(name: &'a str, kind: &str) -> Result<&'a str> {
     Ok(name)
 }
 
+fn validate_label_color(color: &str) -> Result<()> {
+    let color = color.strip_prefix('#').unwrap_or(color);
+    if color.len() != 6 || !color.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Error::Message(format!(
+            "invalid label color '{color}'; expected six hexadecimal digits"
+        )));
+    }
+    Ok(())
+}
+
+fn encode_path_segment(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
 fn validate_state(state: &str) -> Result<()> {
     if matches!(state, "open" | "closed" | "all") {
         Ok(())
@@ -577,5 +811,16 @@ mod tests {
         assert!(validate_name("bad/name", "repository").is_err());
         assert!(validate_state("open").is_ok());
         assert!(validate_state("merged").is_err());
+        assert!(validate_label_color("ff00aa").is_ok());
+        assert!(validate_label_color("#ff00aa").is_ok());
+        assert!(validate_label_color("xyz").is_err());
+        assert_eq!(
+            encode_path_segment("good first issue"),
+            "good%20first%20issue"
+        );
+        assert_eq!(
+            encode_path_segment("refs/heads/main"),
+            "refs%2Fheads%2Fmain"
+        );
     }
 }

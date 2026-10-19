@@ -53,8 +53,10 @@ Implemented:
 
 - token authentication through the existing keychain/file credential store;
 - repository creation, deletion and inspection;
-- pull request creation, listing and merge;
+- pull request creation, listing, reviews and merge;
+- check-run listing;
 - issue creation, listing and closing;
+- repository label creation, listing, deletion and issue/PR assignment;
 - release creation and listing;
 - workflow-run visibility.
 
@@ -62,8 +64,8 @@ Remaining:
 
 - OAuth/device flow and scope management;
 - repository permissions and collaborator management;
-- pull-request reviews and checks;
-- issue labels, milestones and assignees;
+- review-thread resolution and required checks;
+- milestones and assignees;
 - GraphQL queries and richer release assets.
 
 ## Phase 5 — release quality

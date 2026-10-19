@@ -105,8 +105,10 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | GitHub repositories | Yes | Create, delete, show |
 | GitHub issues | Yes | Create, list, close |
 | GitHub pull requests | Yes | Create, list, merge |
-| GitHub reviews and checks | Not implemented | |
-| GitHub labels and milestones | Not implemented | |
+| GitHub reviews | Yes | Approve, request changes, comment, list |
+| GitHub checks | Yes | Check-run listing for a commit/ref |
+| GitHub labels | Yes | Create, list, delete, assign and remove |
+| GitHub milestones | Not implemented | |
 | GitHub releases | Yes | Create, list |
 | GitHub workflow runs | Yes | Read-only listing |
 | GitHub OAuth / device flow | Not implemented | |

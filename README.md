@@ -79,15 +79,15 @@ Implemented:
 - shallow clones (`--depth`) and partial clones (`--filter=blob:none` with
   lazy blob fetch);
 - GitHub login/status/logout, repository create/delete/show, issue
-  create/list/close, pull request create/list/merge, release create/list and
-  workflow-run listing;
+  create/list/close, pull request create/list/review/merge, check-run listing,
+  labels, release create/list and workflow-run listing;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: GitHub OAuth, repository permissions, reviews and checks,
-issue labels/milestones, GraphQL, shallow fetch updates/unshallow, `--filter`
-for local paths, SHA-256 repositories, submodules, LFS, hooks, commit signing,
-`.gitattributes` and CRLF normalization.
+Not implemented yet: GitHub OAuth, repository permissions, review-thread
+resolution, required checks, milestones, GraphQL, release assets, shallow fetch
+updates/unshallow, `--filter` for local paths, SHA-256 repositories, submodules,
+LFS, hooks, commit signing, `.gitattributes` and CRLF normalization.
 
 ## Design decisions
 
@@ -184,6 +184,9 @@ mode, including repositories packed by `git gc`.
 | `cvx github repo create\|delete\|show` | Optional `--push`, `--private`, `--description` |
 | `cvx github issue create\|list\|close` | Issues via the REST API |
 | `cvx github pr create\|list\|merge` | Pull requests; merge method selection |
+| `cvx github pr reviews\|review` | List reviews; approve, request changes or comment |
+| `cvx github checks` | Check runs for `HEAD` or `--reference` |
+| `cvx github label list\|create\|delete\|add\|remove` | Repository and issue/PR labels |
 | `cvx github release create\|list` | Releases and tags |
 | `cvx github workflows` | Recent Actions workflow runs |
 | `cvx add <PATH>...` | `-A/--all`, `-u/--update`, `-f/--force` |

@@ -270,14 +270,14 @@ dependencies = [
 
 [[package]]
 name = "cvx-attributes"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
 ]
 
 [[package]]
 name = "cvx-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "home",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-credential"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "keyring",
@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-diff"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-index",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-github-api"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-credential",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-github-workflow"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-github-api",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-ignore"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "ignore",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-index"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-object",
@@ -369,7 +369,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-merge"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-diff",
@@ -380,7 +380,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-object"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "sha1",
@@ -389,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-odb"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-object",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-pack"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "crc32fast",
  "cvx-core",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-protocol"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-object",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-ref"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-object",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-repository"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-config",
  "cvx-core",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-revision"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-object",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-testkit"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-repository",
@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-transport"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64",
  "cvx-core",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-worktree"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cvx-core",
  "cvx-ignore",

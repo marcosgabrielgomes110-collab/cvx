@@ -255,6 +255,21 @@ pub enum GithubCommand {
         #[command(subcommand)]
         command: GithubReleaseCommand,
     },
+    /// Label operations.
+    Label {
+        /// Label operation.
+        #[command(subcommand)]
+        command: GithubLabelCommand,
+    },
+    /// List check runs for a commit or ref.
+    Checks {
+        /// Commit or ref. Defaults to the local HEAD.
+        #[arg(long, value_name = "REF")]
+        reference: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
     /// List recent GitHub Actions workflow runs.
     Workflows {
         /// Repository as owner/name or URL.
@@ -374,6 +389,95 @@ pub enum GithubPrCommand {
         /// Merge method: merge, squash or rebase.
         #[arg(long, default_value = "merge", value_name = "METHOD")]
         method: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// List reviews for a pull request.
+    Reviews {
+        /// Pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Create a review for a pull request.
+    Review {
+        /// Pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Approve the pull request.
+        #[arg(long, conflicts_with_all = ["request_changes", "comment"])]
+        approve: bool,
+        /// Request changes.
+        #[arg(long, conflicts_with_all = ["approve", "comment"])]
+        request_changes: bool,
+        /// Leave a review comment.
+        #[arg(long, conflicts_with_all = ["approve", "request_changes"])]
+        comment: bool,
+        /// Review body.
+        #[arg(short, long, value_name = "TEXT")]
+        body: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// GitHub label operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubLabelCommand {
+    /// List labels.
+    List {
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Create a label.
+    Create {
+        /// Label name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Six-digit hex color.
+        #[arg(long, default_value = "ededed", value_name = "HEX")]
+        color: String,
+        /// Label description.
+        #[arg(long, value_name = "TEXT")]
+        description: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Delete a label.
+    Delete {
+        /// Label name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Add labels to an issue or pull request.
+    Add {
+        /// Issue or pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Label names.
+        #[arg(value_name = "LABEL", required = true)]
+        labels: Vec<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Remove a label from an issue or pull request.
+    Remove {
+        /// Issue or pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Label name.
+        #[arg(value_name = "LABEL")]
+        label: String,
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,

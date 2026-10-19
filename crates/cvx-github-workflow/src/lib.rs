@@ -4,8 +4,8 @@
 
 use cvx_core::{Error, Result};
 use cvx_github_api::{
-    GitHubClient, Issue, MergeResult, PullRequest, Release, ReleaseOptions, Repository, User,
-    WorkflowRun, parse_repository_slug,
+    CheckRun, GitHubClient, Issue, Label, MergeResult, PullRequest, Release, ReleaseOptions,
+    Repository, Review, User, WorkflowRun, parse_repository_slug,
 };
 use cvx_repository::{PushOptions, Repository as LocalRepository};
 
@@ -142,6 +142,91 @@ impl<'a> GitHubWorkflows<'a> {
     ) -> Result<Vec<PullRequest>> {
         let (owner, repo) = self.slug(explicit)?;
         self.client.list_pull_requests(&owner, &repo, state)
+    }
+
+    /// Lists reviews for a pull request.
+    pub fn list_reviews(&self, explicit: Option<&str>, number: u64) -> Result<Vec<Review>> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client.list_pull_request_reviews(&owner, &repo, number)
+    }
+
+    /// Creates a pull-request review.
+    pub fn create_review(
+        &self,
+        explicit: Option<&str>,
+        number: u64,
+        event: &str,
+        body: Option<&str>,
+    ) -> Result<Review> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client
+            .create_pull_request_review(&owner, &repo, number, event, body)
+    }
+
+    /// Lists check runs for a commit, ref or the local `HEAD`.
+    pub fn check_runs(
+        &self,
+        explicit: Option<&str>,
+        reference: Option<&str>,
+    ) -> Result<Vec<CheckRun>> {
+        let (owner, repo) = self.slug(explicit)?;
+        let reference = match reference {
+            Some(reference) => reference.to_owned(),
+            None => self
+                .repository
+                .head()?
+                .oid()
+                .ok_or_else(|| Error::Message("HEAD has no commits".to_owned()))?
+                .to_hex(),
+        };
+        self.client.list_check_runs(&owner, &repo, &reference)
+    }
+
+    /// Lists labels.
+    pub fn labels(&self, explicit: Option<&str>) -> Result<Vec<Label>> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client.list_labels(&owner, &repo)
+    }
+
+    /// Creates a label.
+    pub fn create_label(
+        &self,
+        explicit: Option<&str>,
+        name: &str,
+        color: &str,
+        description: Option<&str>,
+    ) -> Result<Label> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client
+            .create_label(&owner, &repo, name, color, description)
+    }
+
+    /// Deletes a label.
+    pub fn delete_label(&self, explicit: Option<&str>, name: &str) -> Result<()> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client.delete_label(&owner, &repo, name)
+    }
+
+    /// Adds labels to an issue or pull request.
+    pub fn add_labels(
+        &self,
+        explicit: Option<&str>,
+        number: u64,
+        labels: &[String],
+    ) -> Result<Vec<Label>> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client.add_labels(&owner, &repo, number, labels)
+    }
+
+    /// Removes a label from an issue or pull request.
+    pub fn remove_label(
+        &self,
+        explicit: Option<&str>,
+        number: u64,
+        label: &str,
+    ) -> Result<Vec<Label>> {
+        let (owner, repo) = self.slug(explicit)?;
+        self.client.remove_label(&owner, &repo, number, label)
     }
 
     /// Merges a pull request.
