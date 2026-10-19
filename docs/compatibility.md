@@ -10,8 +10,8 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `.cvx/` control directory | Yes | Yes | Git-compatible internals |
 | `.git/` control directory | Yes | Yes | Compatibility mode |
 | Loose objects (SHA-1) | Yes | Yes | Hash verified on read |
-| Pack v2/v3 | Yes | No | Loose writes; pack writing comes with transport |
-| Pack index v2 | Yes | No | Version-1 indexes are rejected |
+| Pack v2/v3 | Yes | v2 | Writer emits complete objects, not deltas |
+| Pack index v2 | Yes | Yes | Version-1 indexes are rejected |
 | Delta chains (`ofs-delta`, `ref-delta`) | Yes | No | Depth and output size are bounded |
 | Multi-pack index (MIDX) | No | No | Individual `.idx` files are used |
 | `objects/info/alternates` | No | No | Rejected as unsupported |
@@ -88,7 +88,10 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Switch branches in a packed repository | Yes |
 | Merge commits and conflicted index stages | Yes |
 | Annotated and lightweight tags | Yes |
-| Clone / fetch / push | Not implemented |
+| Pack writing | Yes | Complete objects and version-2 indexes |
+| Clone / fetch / push over local paths | Yes | `file://` and filesystem paths |
+| Clone / fetch / push over HTTPS or SSH | Not implemented | Explicit unsupported-transport error |
+| Credentials and keychain | Not implemented | |
 | GitHub API and authentication | Not implemented |
 | Shallow and partial clones | Not implemented |
 | Replace refs and grafts | Not implemented |

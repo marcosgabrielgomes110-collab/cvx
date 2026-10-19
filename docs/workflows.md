@@ -118,7 +118,46 @@ flowchart TD
     Abort --> Restore["restore ORIG_HEAD tree and index"]
 ```
 
-## Planned clone/push
+## Local clone, fetch and push
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant CLI as cvx-cli
+    participant Repo as cvx-repository
+    participant Source as source repository
+    participant Dest as destination repository
+
+    Dev->>CLI: cvx clone ../source checkout
+    CLI->>Repo: clone_local(url, directory)
+    Repo->>Source: open and list heads/tags
+    Repo->>Source: collect reachable objects
+    Repo->>Dest: init and write pack + index
+    Repo->>Dest: write branches, tracking refs and tags
+    Repo->>Dest: checkout HEAD and write index
+    Repo-->>CLI: clone outcome
+    CLI-->>Dev: checked out branch
+
+    Dev->>CLI: cvx fetch origin
+    CLI->>Repo: fetch(origin)
+    Repo->>Source: collect reachable objects
+    Repo->>Dest: copy missing loose objects
+    Repo->>Dest: update refs/remotes/origin/* and FETCH_HEAD
+    Repo-->>CLI: fetch outcome
+
+    Dev->>CLI: cvx push origin main
+    CLI->>Repo: push(origin, main)
+    Repo->>Dest: copy missing objects
+    Repo->>Dest: fast-forward check and ref update
+    Repo->>Dest: update remote worktree and index
+    Repo-->>CLI: push outcome
+```
+
+## Planned network clone/push
+
+HTTPS and SSH reuse the same repository-level flows once protocol v2 response
+parsing and transport streams are implemented.
 
 ```mermaid
 sequenceDiagram

@@ -15,6 +15,8 @@ mod diff;
 mod init;
 mod log;
 mod merge;
+mod reachable;
+mod remote;
 mod repository;
 mod restore;
 mod status;
@@ -32,6 +34,7 @@ pub use diff::DiffOptions;
 pub use init::{InitOptions, InitOutcome, InitStorage};
 pub use log::LogOptions;
 pub use merge::{MergeOptions, MergeOutcome};
+pub use remote::{CloneOptions, CloneOutcome, FetchOutcome, PushOptions, PushOutcome, RemoteInfo};
 pub use repository::{CVX_DIR, GIT_DIR, Repository, RepositoryKind, TreeLeaf};
 pub use restore::{RestoreOptions, RestoreOutcome};
 pub use status::{

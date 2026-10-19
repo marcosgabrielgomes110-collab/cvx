@@ -10,9 +10,10 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: local workflow alpha.** The local core, navigation and merge
-> workflows are implemented. Network operations and GitHub integration are not
-> available yet. Commands are announced here as they become usable.
+> **Status: local transport alpha.** The local core, navigation, merge and
+> local-path transport workflows are implemented. HTTPS, SSH and GitHub
+> integration are not available yet. Commands are announced here as they become
+> usable.
 
 ## What works today
 
@@ -30,7 +31,14 @@ $ cvx switch feature/auth
 $ cvx merge main
 $ cvx tag -a v1.0.0 -m "first release"
 $ cvx log --oneline --decorate
+$ cvx clone ../other checkout
+$ cvx fetch origin
+$ cvx push origin main
 ```
+
+Local paths and `file://` URLs are supported today; `https://` and `ssh://`
+fail with an explicit unsupported-transport error until the network milestone
+lands.
 
 Implemented:
 
@@ -45,12 +53,15 @@ Implemented:
 - `merge --abort` and `merge --continue`;
 - annotated and lightweight tags, plus `log --decorate`;
 - rename detection in `status` and `diff`;
+- pack writing and readable/writable pack indexes;
+- object enumeration and commit/tree/tag reachability;
+- `clone`, `fetch`, `push` and remotes over local paths and `file://`;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: clone/fetch/push, GitHub authentication and APIs, SHA-256
-repositories, submodules, LFS, hooks, commit signing, `.gitattributes` and
-CRLF normalization.
+Not implemented yet: HTTPS and SSH transports, credentials and keychain,
+GitHub authentication and APIs, SHA-256 repositories, submodules, LFS, hooks,
+commit signing, `.gitattributes` and CRLF normalization.
 
 ## Design decisions
 
@@ -133,6 +144,10 @@ mode, including repositories packed by `git gc`.
 | Command | Notes |
 | --- | --- |
 | `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--quiet` |
+| `cvx clone <URL> [DIR]` | Local paths and `file://`; `--branch`, `--storage` |
+| `cvx remote [list]` | `add <NAME> <URL>` |
+| `cvx fetch [REMOTE]` | Updates `refs/remotes/*` and tags |
+| `cvx push [REMOTE] [BRANCH]` | `-f/--force` for non-fast-forward updates |
 | `cvx add <PATH>...` | `-A/--all`, `-u/--update`, `-f/--force` |
 | `cvx commit -m <MSG>` | Repeat `-m` for paragraphs; `--allow-empty` |
 | `cvx status` | `--porcelain`, `--short`, `--untracked-files=no\|normal\|all` |
@@ -203,7 +218,7 @@ does not.
 | 1 | Local core: objects, index, refs, commits, status, log | Complete |
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
-| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Next |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | In progress — local transport complete |
 | 4 | GitHub API, auth, pull requests, issues, releases | Planned |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 

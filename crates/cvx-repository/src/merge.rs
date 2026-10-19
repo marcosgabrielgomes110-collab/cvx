@@ -399,7 +399,7 @@ impl Repository {
         Ok(MergeOutcome::FastForward { oid: target_oid })
     }
 
-    fn tree_snapshot_for_commit(&self, oid: ObjectId) -> Result<TreeSnapshot> {
+    pub(crate) fn tree_snapshot_for_commit(&self, oid: ObjectId) -> Result<TreeSnapshot> {
         let commit = self.read_commit(oid)?;
         Ok(self
             .read_tree_recursive(commit.tree)?

@@ -83,6 +83,21 @@ impl PackIndex {
         self.count
     }
 
+    pub(crate) fn oids(&self) -> Result<Vec<ObjectId>> {
+        let mut oids = Vec::with_capacity(self.count);
+        for index in 0..self.count {
+            let start = self.names_start + index * 20;
+            let oid = ObjectId::from_slice(
+                self.bytes
+                    .get(start..start + 20)
+                    .ok_or_else(|| Error::corrupt("pack index is truncated"))?,
+            )
+            .map_err(|error| Error::corrupt(format!("pack index has an invalid id: {error}")))?;
+            oids.push(oid);
+        }
+        Ok(oids)
+    }
+
     pub(crate) fn pack_checksum(&self) -> Result<&[u8]> {
         let start = self.bytes.len() - 2 * CHECKSUM_LEN;
         Ok(&self.bytes[start..start + CHECKSUM_LEN])

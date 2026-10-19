@@ -55,10 +55,26 @@ impl TestEnv {
     }
 
     pub fn git(&self, args: &[&str]) -> Output {
+        self.git_in(&self.repo, args)
+    }
+
+    pub fn cvx_in(&self, directory: &Path) -> Command {
+        let mut command = Command::cargo_bin("cvx").expect("cvx binary");
+        command
+            .current_dir(directory)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", &self.global_config)
+            .env("HOME", &self.home)
+            .env("XDG_CONFIG_HOME", &self.xdg);
+        clear_identity_environment(&mut command);
+        command
+    }
+
+    pub fn git_in(&self, directory: &Path, args: &[&str]) -> Output {
         let mut command = Command::new("git");
         command
             .args(args)
-            .current_dir(&self.repo)
+            .current_dir(directory)
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("GIT_CONFIG_GLOBAL", &self.global_config)
             .env("HOME", &self.home)

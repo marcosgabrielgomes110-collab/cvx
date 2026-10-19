@@ -115,6 +115,11 @@ impl Pack {
         Ok(self.index.find(oid)?.is_some())
     }
 
+    /// Returns every object identifier in the pack index.
+    pub fn oids(&self) -> Result<Vec<ObjectId>> {
+        self.index.oids()
+    }
+
     /// Reads and verifies an object.
     pub fn read(&self, oid: ObjectId) -> Result<PackObject> {
         let Some(offset) = self.index.find(oid)? else {

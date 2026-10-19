@@ -346,6 +346,7 @@ dependencies = [
 name = "cvx-pack"
 version = "0.1.0"
 dependencies = [
+ "crc32fast",
  "cvx-core",
  "cvx-object",
  "flate2",
@@ -383,6 +384,7 @@ dependencies = [
  "cvx-merge",
  "cvx-object",
  "cvx-odb",
+ "cvx-pack",
  "cvx-ref",
  "cvx-revision",
  "tempfile",

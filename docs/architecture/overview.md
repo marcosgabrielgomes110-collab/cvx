@@ -35,7 +35,7 @@ cvx-cli
    |
 cvx-repository        use cases: init, add, commit, status, log,
    |                  diff, restore, checkout, branch, switch,
-   |                  merge, tag
+   |                  merge, tag, clone, remote, fetch, push
    |
    +-- cvx-revision   revision parsing, commit graph and merge base
    +-- cvx-worktree   worktree scan and status
@@ -107,6 +107,9 @@ The local workflow implemented in this workspace covers:
 - three-way merges, conflict markers, index stages 1/2/3, merge commits with
   two parents and `merge --abort`/`--continue`;
 - annotated and lightweight tags, `log --decorate` and rename detection;
+- version-2 pack writing and pack-index generation;
+- local-path clone, fetch, push and remote configuration;
+- protocol v2 pkt-line and request builders;
 - loose object writes and verified reads;
 - version-2 packfiles and indexes, including delta chains;
 - index versions 2 through 4 on input, version-2 writes (or version 3 when

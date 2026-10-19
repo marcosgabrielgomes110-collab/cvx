@@ -25,6 +25,18 @@ pub enum Command {
     /// Create an empty CVX repository.
     Init(InitArgs),
 
+    /// Clone a repository into a new directory.
+    Clone(CloneArgs),
+
+    /// Manage remotes.
+    Remote(RemoteArgs),
+
+    /// Download objects and refs from a remote.
+    Fetch(FetchArgs),
+
+    /// Update a remote branch.
+    Push(PushArgs),
+
     /// Add file contents to the index.
     Add(AddArgs),
 
@@ -82,6 +94,74 @@ pub struct InitArgs {
     /// Suppress the summary.
     #[arg(short, long)]
     pub quiet: bool,
+}
+
+/// Arguments for `cvx clone`.
+#[derive(Debug, clap::Args)]
+pub struct CloneArgs {
+    /// Repository URL or local path.
+    #[arg(value_name = "URL")]
+    pub url: String,
+
+    /// Destination directory.
+    #[arg(value_name = "DIRECTORY")]
+    pub directory: Option<PathBuf>,
+
+    /// Branch to check out.
+    #[arg(short, long, value_name = "BRANCH")]
+    pub branch: Option<String>,
+
+    /// Control-directory convention to create.
+    #[arg(long, value_enum, default_value = "cvx", value_name = "STORAGE")]
+    pub storage: StorageArg,
+}
+
+/// Arguments for `cvx remote`.
+#[derive(Debug, clap::Args)]
+pub struct RemoteArgs {
+    /// Remote operation.
+    #[command(subcommand)]
+    pub command: Option<RemoteCommand>,
+}
+
+/// Remote subcommands.
+#[derive(Debug, Subcommand)]
+pub enum RemoteCommand {
+    /// List configured remotes.
+    List,
+    /// Add a remote.
+    Add {
+        /// Remote name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Remote URL or local path.
+        #[arg(value_name = "URL")]
+        url: String,
+    },
+}
+
+/// Arguments for `cvx fetch`.
+#[derive(Debug, clap::Args)]
+pub struct FetchArgs {
+    /// Remote name. Defaults to origin.
+    #[arg(value_name = "REMOTE")]
+    pub remote: Option<String>,
+}
+
+/// Arguments for `cvx push`.
+#[derive(Debug, clap::Args)]
+pub struct PushArgs {
+    /// Remote name. Defaults to origin.
+    #[arg(value_name = "REMOTE")]
+    pub remote: Option<String>,
+
+    /// Branch to push. Defaults to the current branch.
+    #[arg(value_name = "BRANCH")]
+    pub branch: Option<String>,
+
+    /// Allow non-fast-forward updates.
+    #[arg(short, long)]
+    pub force: bool,
 }
 
 /// Arguments for `cvx add`.

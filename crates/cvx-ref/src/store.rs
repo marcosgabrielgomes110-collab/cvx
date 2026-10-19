@@ -83,6 +83,17 @@ impl RefStore {
         Ok(self.read_head()?.oid())
     }
 
+    /// Writes a symbolic reference that points at another reference.
+    pub fn write_ref_symbolic(&self, name: &str, target: &str) -> Result<()> {
+        cvx_core::refname::validate_ref_name(name)?;
+        cvx_core::refname::validate_ref_name(target)?;
+        cvx_core::fs::write_atomic(
+            &self.git_dir.join(name),
+            format!("ref: {target}\n").as_bytes(),
+            Some(0o644),
+        )
+    }
+
     /// Writes a direct reference.
     pub fn write_ref(&self, name: &str, oid: ObjectId) -> Result<()> {
         cvx_core::refname::validate_ref_name(name)?;

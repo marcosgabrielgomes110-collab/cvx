@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
@@ -68,6 +69,60 @@ impl ObjectStore {
     pub fn pack_count(&self) -> usize {
         self.packs.len()
     }
+
+    /// Lists every object present in loose storage and opened packs.
+    pub fn iter_oids(&self) -> Result<Vec<ObjectId>> {
+        let mut oids = BTreeSet::new();
+        let objects_dir = self.loose.objects_dir();
+
+        let entries = match std::fs::read_dir(objects_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(Error::io(objects_dir.display().to_string(), error)),
+        };
+
+        for entry in entries {
+            let entry =
+                entry.map_err(|error| Error::io(objects_dir.display().to_string(), error))?;
+            let Some(directory) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if directory.len() != 2 || !directory.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                continue;
+            }
+            let directory_path = entry.path();
+            let files = match std::fs::read_dir(&directory_path) {
+                Ok(files) => files,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    return Err(Error::io(directory_path.display().to_string(), error));
+                }
+            };
+            for file in files {
+                let file =
+                    file.map_err(|error| Error::io(directory_path.display().to_string(), error))?;
+                let Some(name) = file.file_name().to_str().map(str::to_owned) else {
+                    continue;
+                };
+                if name.len() != 38 || !name.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                    continue;
+                }
+                if let Ok(oid) = ObjectId::from_hex(&format!("{directory}{name}")) {
+                    oids.insert(oid);
+                }
+            }
+        }
+
+        for pack in &self.packs {
+            for oid in pack.oids()? {
+                oids.insert(oid);
+            }
+        }
+
+        Ok(oids.into_iter().collect())
+    }
 }
 
 fn open_packs(pack_dir: &Path) -> Result<Vec<Pack>> {
@@ -112,5 +167,26 @@ mod tests {
         let oid = store.write(ObjectKind::Blob, b"hello\n").expect("write");
         assert_eq!(store.read(oid).expect("read").data, b"hello\n");
         assert!(store.contains(oid).expect("contains"));
+    }
+
+    #[test]
+    fn lists_loose_and_packed_objects() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let objects_dir = temp.path().join("objects");
+        let store = ObjectStore::open(&objects_dir).expect("open");
+        let loose = store.write(ObjectKind::Blob, b"loose\n").expect("write");
+
+        let input = cvx_pack::PackInput {
+            kind: ObjectKind::Blob,
+            data: b"packed\n",
+        };
+        let packed = cvx_pack::write_pack(objects_dir.join("pack"), &[input]).expect("pack");
+        let packed_oid = packed.objects[0].oid;
+
+        let reopened = ObjectStore::open(&objects_dir).expect("reopen");
+        let oids = reopened.iter_oids().expect("iter");
+        assert!(oids.contains(&loose));
+        assert!(oids.contains(&packed_oid));
+        assert_eq!(oids.len(), 2);
     }
 }

@@ -89,6 +89,7 @@ impl Repository {
         let candidates = [
             format!("refs/heads/{revision}"),
             format!("refs/tags/{revision}"),
+            format!("refs/remotes/{revision}"),
             revision.to_owned(),
         ];
         for candidate in candidates {

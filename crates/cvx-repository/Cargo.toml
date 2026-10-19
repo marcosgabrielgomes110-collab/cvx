@@ -17,6 +17,7 @@ cvx-index = { workspace = true }
 cvx-merge = { workspace = true }
 cvx-object = { workspace = true }
 cvx-odb = { workspace = true }
+cvx-pack = { workspace = true }
 cvx-ref = { workspace = true }
 cvx-revision = { workspace = true }
 tempfile = { workspace = true }

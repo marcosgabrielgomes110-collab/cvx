@@ -795,6 +795,6 @@ fn help_lists_only_implemented_commands() {
     assert!(text.contains("switch"));
     assert!(text.contains("merge"));
     assert!(text.contains("tag"));
-    assert!(!text.contains("clone"));
-    assert!(!text.contains("push"));
+    assert!(text.contains("clone"));
+    assert!(text.contains("push"));
 }

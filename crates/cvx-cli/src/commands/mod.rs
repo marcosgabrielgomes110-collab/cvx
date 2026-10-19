@@ -1,11 +1,15 @@
 pub mod add;
 pub mod branch;
 pub mod checkout;
+pub mod clone;
 pub mod commit;
 pub mod diff;
+pub mod fetch;
 pub mod init;
 pub mod log;
 pub mod merge;
+pub mod push;
+pub mod remote;
 pub mod restore;
 pub mod status;
 pub mod switch;

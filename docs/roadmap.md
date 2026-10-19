@@ -9,7 +9,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 1 | Objects, index, refs, commits, status, log, pack reads | Complete |
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
-| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Next |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | In progress — local transport complete |
 | 4 | GitHub API, auth, pull requests, issues, releases | Planned |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 
@@ -26,8 +26,16 @@ is implemented, covered by tests and documented in the compatibility matrix.
 
 ## Phase 3 — transport
 
-- pack writing and object indexing;
-- Git protocol v2 discovery and negotiation;
+Implemented:
+
+- pack writing and version-2 index generation;
+- object enumeration and reachability;
+- clone, fetch, push and remotes over local paths and `file://`;
+- protocol v2 pkt-line framing, capability parsing and request builders.
+
+Remaining:
+
+- protocol v2 response parsing, negotiation loop and pack ingestion;
 - clone, fetch and push over HTTPS and SSH;
 - credential helpers and OS keychain integration;
 - shallow and partial clone support where explicit.

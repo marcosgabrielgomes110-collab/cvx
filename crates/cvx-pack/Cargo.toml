@@ -9,6 +9,7 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
+crc32fast = { workspace = true }
 cvx-core = { workspace = true }
 cvx-object = { workspace = true }
 flate2 = { workspace = true }

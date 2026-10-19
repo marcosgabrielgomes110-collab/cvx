@@ -273,6 +273,6 @@ fn help_lists_only_implemented_commands() {
     let text = stdout(&output);
     assert!(text.contains("init"));
     assert!(text.contains("version"));
-    assert!(!text.contains("clone"));
-    assert!(!text.contains("push"));
+    assert!(text.contains("clone"));
+    assert!(text.contains("push"));
 }
