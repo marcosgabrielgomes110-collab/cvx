@@ -5,6 +5,7 @@ Start here:
 - [Architecture with Mermaid diagrams](architecture.md)
 - [Workflows and sequence diagrams](workflows.md)
 - [Compatibility matrix](compatibility.md)
+- [GitHub integration](github.md)
 - [Roadmap](roadmap.md)
 - [Benchmarks and reporting format](benchmarks.md)
 

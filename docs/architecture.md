@@ -38,8 +38,8 @@ flowchart TB
     end
 
     subgraph GitHub["GitHub (core workflows)"]
-        API["cvx-github-api<br/>REST"]
-        Flow["cvx-github-workflow<br/>repos, issues, PRs, releases"]
+        API["cvx-github-api<br/>REST + GraphQL"]
+        Flow["cvx-github-workflow<br/>repos, issues, PRs, reviews, releases"]
         Flow --> API
     end
 
@@ -48,8 +48,8 @@ flowchart TB
     CLI --> Flow
 ```
 
-Solid arrows are implemented dependencies. Dotted arrows are planned
-integration points.
+Solid arrows are implemented dependencies. GitHub and remote layers are
+integrated through the repository and transport crates.
 
 ## Crate dependency graph
 
@@ -339,9 +339,10 @@ sequenceDiagram
     end
 ```
 
-## Future remote flow
+## Remote and GitHub flow
 
-This diagram documents intended behavior, not current support.
+The transport and GitHub layers are implemented. The diagram shows the
+clone/fetch/push path and the separate API path for collaboration.
 
 ```mermaid
 sequenceDiagram

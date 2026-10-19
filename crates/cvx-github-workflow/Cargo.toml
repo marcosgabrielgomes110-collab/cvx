@@ -13,6 +13,7 @@ cvx-core = { workspace = true }
 cvx-github-api = { workspace = true }
 cvx-repository = { workspace = true }
 cvx-transport = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

@@ -10,8 +10,8 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
-| 4 | GitHub API, auth, pull requests, issues, releases | In progress — core workflows implemented |
-| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
+| 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
+| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Next |
 
 ## Phase 2B — merge and history workflows
 
@@ -49,24 +49,27 @@ Known limitations:
 
 ## Phase 4 — GitHub
 
-Implemented:
+Complete in v0.3.0:
 
-- token authentication through the existing keychain/file credential store;
+- token and OAuth device-flow authentication with keychain/file storage;
+- OAuth scope inspection and required-scope checks;
 - repository creation, deletion and inspection;
-- pull request creation, listing, reviews and merge;
-- check-run listing;
-- issue creation, listing and closing;
+- collaborator listing, add/remove and effective permission lookup;
+- pull request creation, listing, reviews, review threads and merge;
+- review-thread resolution and unresolution through GraphQL;
+- check-run listing and required status-check inspection/replacement;
+- issue creation, listing, closing, assignees and milestones;
 - repository label creation, listing, deletion and issue/PR assignment;
-- release creation and listing;
-- workflow-run visibility.
+- release creation, listing, asset upload and deletion;
+- workflow-run visibility;
+- generic GraphQL queries with inline or file-based variables.
 
-Remaining:
+Known limitations:
 
-- OAuth/device flow and scope management;
-- repository permissions and collaborator management;
-- review-thread resolution and required checks;
-- milestones and assignees;
-- GraphQL queries and richer release assets.
+- GraphQL review threads return the first 100 threads and comments;
+- required status checks require branch protection to be enabled already;
+- release uploads read the asset into memory before sending;
+- fine-grained tokens may not expose OAuth scope headers.
 
 ## Phase 5 — release quality
 

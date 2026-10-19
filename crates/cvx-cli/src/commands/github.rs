@@ -1,21 +1,27 @@
 use std::io::Read;
+use std::time::{Duration, Instant};
 
 use cvx_core::{Error, Result};
 use cvx_credential::{Credential, CredentialBackend, CredentialStore};
+use cvx_github_api::{DevicePoll, GitHubClient, poll_device_token, request_device_code};
 use cvx_github_workflow::GitHubWorkflows;
 use cvx_repository::Repository;
+use serde_json::Value;
 
 use crate::cli::{
-    GithubArgs, GithubCommand, GithubIssueCommand, GithubLabelCommand, GithubPrCommand,
-    GithubReleaseCommand, GithubRepoCommand,
+    ChecksArgs, ChecksCommand, GithubArgs, GithubCollaboratorCommand, GithubCommand,
+    GithubIssueCommand, GithubLabelCommand, GithubMilestoneCommand, GithubPrCommand,
+    GithubReleaseCommand, GithubRepoCommand, GraphqlArgs, LoginArgs, ScopesArgs,
 };
 
 /// Executes `cvx github`.
 pub fn run(args: GithubArgs) -> Result<()> {
     match args.command {
-        GithubCommand::Login => login(),
+        GithubCommand::Login(args) => login(args),
         GithubCommand::Status => status(),
         GithubCommand::Logout => logout(),
+        GithubCommand::Scopes(args) => scopes(args),
+        GithubCommand::Graphql(args) => graphql(args),
         GithubCommand::Repo { command } => with_workflows(|workflows| match command {
             GithubRepoCommand::Create {
                 name,
@@ -81,8 +87,20 @@ pub fn run(args: GithubArgs) -> Result<()> {
             }
         }),
         GithubCommand::Issue { command } => with_workflows(|workflows| match command {
-            GithubIssueCommand::Create { title, body, repo } => {
-                let issue = workflows.create_issue(repo.as_deref(), &title, body.as_deref())?;
+            GithubIssueCommand::Create {
+                title,
+                body,
+                assignees,
+                milestone,
+                repo,
+            } => {
+                let issue = workflows.create_issue(
+                    repo.as_deref(),
+                    &title,
+                    body.as_deref(),
+                    &assignees,
+                    milestone,
+                )?;
                 println!(
                     "#{} [{}] {} {}",
                     issue.number, issue.state, issue.title, issue.html_url
@@ -91,9 +109,29 @@ pub fn run(args: GithubArgs) -> Result<()> {
             }
             GithubIssueCommand::List { state, repo } => {
                 for issue in workflows.list_issues(repo.as_deref(), &state)? {
+                    let assignees: Vec<&str> = issue
+                        .assignees
+                        .iter()
+                        .map(|owner| owner.login.as_str())
+                        .collect();
+                    let milestone = issue
+                        .milestone
+                        .as_ref()
+                        .map(|milestone| format!(" milestone={}", milestone.title))
+                        .unwrap_or_default();
+                    let assignees = if assignees.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" @{}", assignees.join(", @"))
+                    };
                     println!(
-                        "#{:<6} [{}] {} {}",
-                        issue.number, issue.state, issue.title, issue.html_url
+                        "#{:<6} [{}] {}{}{} {}",
+                        issue.number,
+                        issue.state,
+                        issue.title,
+                        assignees,
+                        milestone,
+                        issue.html_url
                     );
                 }
                 Ok(())
@@ -101,6 +139,34 @@ pub fn run(args: GithubArgs) -> Result<()> {
             GithubIssueCommand::Close { number, repo } => {
                 let issue = workflows.close_issue(repo.as_deref(), number)?;
                 println!("#{} closed: {}", issue.number, issue.html_url);
+                Ok(())
+            }
+            GithubIssueCommand::Assign {
+                number,
+                assignees,
+                repo,
+            } => {
+                let issue = workflows.assign_issue(repo.as_deref(), number, &assignees)?;
+                let names: Vec<&str> = issue
+                    .assignees
+                    .iter()
+                    .map(|owner| owner.login.as_str())
+                    .collect();
+                println!("#{} assignees: {}", number, names.join(", "));
+                Ok(())
+            }
+            GithubIssueCommand::Unassign {
+                number,
+                assignees,
+                repo,
+            } => {
+                let issue = workflows.unassign_issue(repo.as_deref(), number, &assignees)?;
+                let names: Vec<&str> = issue
+                    .assignees
+                    .iter()
+                    .map(|owner| owner.login.as_str())
+                    .collect();
+                println!("#{} assignees: {}", number, names.join(", "));
                 Ok(())
             }
         }),
@@ -188,6 +254,37 @@ pub fn run(args: GithubArgs) -> Result<()> {
                 );
                 Ok(())
             }
+            GithubPrCommand::Threads { number, repo } => {
+                for thread in workflows.review_threads(repo.as_deref(), number)? {
+                    let location = match (&thread.path, thread.line) {
+                        (Some(path), Some(line)) => format!("{path}:{line}"),
+                        (Some(path), None) => path.clone(),
+                        _ => "-".to_owned(),
+                    };
+                    println!(
+                        "{} resolved={} outdated={} {}",
+                        thread.id, thread.is_resolved, thread.is_outdated, location
+                    );
+                    for comment in &thread.comments {
+                        println!(
+                            "  @{}: {}",
+                            comment.author.as_deref().unwrap_or("unknown"),
+                            comment.body.replace('\n', " ")
+                        );
+                    }
+                }
+                Ok(())
+            }
+            GithubPrCommand::Resolve { thread_id } => {
+                let state = workflows.set_review_thread_resolved(&thread_id, true)?;
+                println!("{} resolved={}", state.id, state.is_resolved);
+                Ok(())
+            }
+            GithubPrCommand::Unresolve { thread_id } => {
+                let state = workflows.set_review_thread_resolved(&thread_id, false)?;
+                println!("{} resolved={}", state.id, state.is_resolved);
+                Ok(())
+            }
         }),
         GithubCommand::Label { command } => with_workflows(|workflows| match command {
             GithubLabelCommand::List { repo } => {
@@ -242,18 +339,88 @@ pub fn run(args: GithubArgs) -> Result<()> {
                 Ok(())
             }
         }),
-        GithubCommand::Checks { reference, repo } => with_workflows(|workflows| {
-            for check in workflows.check_runs(repo.as_deref(), reference.as_deref())? {
-                println!(
-                    "{:<12} {:<14} {:<30} {}",
-                    check.status,
-                    check.conclusion.unwrap_or_else(|| "-".to_owned()),
-                    check.name,
-                    check.html_url.unwrap_or_default()
-                );
+        GithubCommand::Collaborator { command } => with_workflows(|workflows| match command {
+            GithubCollaboratorCommand::List { repo } => {
+                for collaborator in workflows.collaborators(repo.as_deref())? {
+                    let permissions = collaborator.permissions.as_ref();
+                    let permission = permissions
+                        .map(|permissions| {
+                            if permissions.admin {
+                                "admin"
+                            } else if permissions.maintain {
+                                "maintain"
+                            } else if permissions.push {
+                                "push"
+                            } else if permissions.triage {
+                                "triage"
+                            } else {
+                                "pull"
+                            }
+                        })
+                        .unwrap_or("-");
+                    println!("{:<32} {}", collaborator.login, permission);
+                }
+                Ok(())
             }
-            Ok(())
+            GithubCollaboratorCommand::Add {
+                user,
+                permission,
+                repo,
+            } => {
+                workflows.add_collaborator(repo.as_deref(), &user, &permission)?;
+                println!("{user} added with {permission} permission");
+                Ok(())
+            }
+            GithubCollaboratorCommand::Remove { user, repo } => {
+                workflows.remove_collaborator(repo.as_deref(), &user)?;
+                println!("Removed collaborator {user}");
+                Ok(())
+            }
+            GithubCollaboratorCommand::Permission { user, repo } => {
+                let permission = workflows.collaborator_permission(repo.as_deref(), &user)?;
+                println!("{}: {}", permission.user.login, permission.permission);
+                Ok(())
+            }
         }),
+        GithubCommand::Milestone { command } => with_workflows(|workflows| match command {
+            GithubMilestoneCommand::List { state, repo } => {
+                for milestone in workflows.milestones(repo.as_deref(), &state)? {
+                    println!(
+                        "#{:<5} [{}] {} open={} closed={}",
+                        milestone.number,
+                        milestone.state,
+                        milestone.title,
+                        milestone.open_issues,
+                        milestone.closed_issues
+                    );
+                }
+                Ok(())
+            }
+            GithubMilestoneCommand::Create {
+                title,
+                description,
+                due_on,
+                repo,
+            } => {
+                let milestone = workflows.create_milestone(
+                    repo.as_deref(),
+                    &title,
+                    description.as_deref(),
+                    due_on.as_deref(),
+                )?;
+                println!(
+                    "#{} [{}] {}",
+                    milestone.number, milestone.state, milestone.title
+                );
+                Ok(())
+            }
+            GithubMilestoneCommand::Close { number, repo } => {
+                let milestone = workflows.close_milestone(repo.as_deref(), number)?;
+                println!("#{} closed: {}", milestone.number, milestone.title);
+                Ok(())
+            }
+        }),
+        GithubCommand::Checks(args) => checks(args),
         GithubCommand::Release { command } => with_workflows(|workflows| match command {
             GithubReleaseCommand::List { repo } => {
                 for release in workflows.list_releases(repo.as_deref())? {
@@ -270,6 +437,7 @@ pub fn run(args: GithubArgs) -> Result<()> {
                 body,
                 draft,
                 prerelease,
+                assets,
                 repo,
             } => {
                 let release = workflows.create_release(
@@ -284,6 +452,53 @@ pub fn run(args: GithubArgs) -> Result<()> {
                     "Created release {} (draft={}, prerelease={}): {}",
                     release.tag_name, release.draft, release.prerelease, release.html_url
                 );
+                for asset in assets {
+                    let uploaded = workflows.upload_release_asset(
+                        repo.as_deref(),
+                        &tag,
+                        &asset,
+                        None,
+                        None,
+                        false,
+                    )?;
+                    println!("Uploaded {} ({} bytes)", uploaded.name, uploaded.size);
+                }
+                Ok(())
+            }
+            GithubReleaseCommand::Assets { tag, repo } => {
+                for asset in workflows.release_assets(repo.as_deref(), &tag)? {
+                    println!(
+                        "{:<10} {:<40} {:>12} {}",
+                        asset.id, asset.name, asset.size, asset.browser_download_url
+                    );
+                }
+                Ok(())
+            }
+            GithubReleaseCommand::Upload {
+                tag,
+                path,
+                name,
+                label,
+                clobber,
+                repo,
+            } => {
+                let asset = workflows.upload_release_asset(
+                    repo.as_deref(),
+                    &tag,
+                    &path,
+                    name.as_deref(),
+                    label.as_deref(),
+                    clobber,
+                )?;
+                println!(
+                    "Uploaded {} ({} bytes): {}",
+                    asset.name, asset.size, asset.browser_download_url
+                );
+                Ok(())
+            }
+            GithubReleaseCommand::DeleteAsset { asset_id, repo } => {
+                workflows.delete_release_asset(repo.as_deref(), asset_id)?;
+                println!("Deleted release asset {asset_id}");
                 Ok(())
             }
         }),
@@ -309,7 +524,15 @@ fn with_workflows<T>(operation: impl FnOnce(&GitHubWorkflows<'_>) -> Result<T>) 
     operation(&workflows)
 }
 
-fn login() -> Result<()> {
+fn login(args: LoginArgs) -> Result<()> {
+    if args.oauth {
+        login_oauth(args)
+    } else {
+        login_token()
+    }
+}
+
+fn login_token() -> Result<()> {
     let mut token = String::new();
     std::io::stdin()
         .read_to_string(&mut token)
@@ -321,12 +544,79 @@ fn login() -> Result<()> {
         ));
     }
 
+    store_token(&token)?;
+    let user = GitHubClient::new(&token).current_user()?;
+    println!("Authenticated as {}", user.login);
+    Ok(())
+}
+
+fn login_oauth(args: LoginArgs) -> Result<()> {
+    let client_id = args
+        .client_id
+        .or_else(|| std::env::var("CVX_GITHUB_CLIENT_ID").ok())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            Error::Message(
+                "OAuth client id is required; set CVX_GITHUB_CLIENT_ID or pass --client-id"
+                    .to_owned(),
+            )
+        })?;
+    let scopes = if args.scopes.is_empty() {
+        vec![
+            "repo".to_owned(),
+            "workflow".to_owned(),
+            "read:org".to_owned(),
+        ]
+    } else {
+        args.scopes
+    };
+
+    let code = request_device_code(&client_id, &scopes)?;
+    println!(
+        "Open {} and enter code {}",
+        code.verification_uri, code.user_code
+    );
+    println!("Waiting for authorization...");
+
+    let mut interval = code.interval.max(1);
+    let deadline = Instant::now() + Duration::from_secs(code.expires_in);
+    loop {
+        if Instant::now() >= deadline {
+            return Err(Error::Message("GitHub device code expired".to_owned()));
+        }
+        std::thread::sleep(Duration::from_secs(interval));
+        match poll_device_token(&client_id, &code.device_code)? {
+            DevicePoll::Pending => {}
+            DevicePoll::SlowDown => interval = interval.saturating_add(5),
+            DevicePoll::Authorized(token) => {
+                store_token(&token.access_token)?;
+                let user = GitHubClient::new(&token.access_token).current_user()?;
+                println!(
+                    "Authenticated as {} with scopes: {}",
+                    user.login,
+                    token.scopes.join(", ")
+                );
+                return Ok(());
+            }
+            DevicePoll::AccessDenied => {
+                return Err(Error::Message(
+                    "GitHub OAuth authorization was denied".to_owned(),
+                ));
+            }
+            DevicePoll::Expired => {
+                return Err(Error::Message("GitHub device code expired".to_owned()));
+            }
+        }
+    }
+}
+
+fn store_token(token: &str) -> Result<()> {
     let store = CredentialStore::open_default()?;
     let backend = store.store(
         "github.com",
         &Credential {
             username: "x-access-token".to_owned(),
-            password: token,
+            password: token.to_owned(),
         },
     )?;
     let location = match backend {
@@ -335,6 +625,107 @@ fn login() -> Result<()> {
     };
     println!("Stored GitHub credential in {location}");
     Ok(())
+}
+
+fn scopes(args: ScopesArgs) -> Result<()> {
+    let client = GitHubClient::from_credentials()?;
+    let scopes = client.auth_scopes()?;
+    println!("token scopes: {}", scopes.token.join(", "));
+    println!("accepted scopes: {}", scopes.accepted.join(", "));
+    for required in args.require {
+        if !scopes.token.iter().any(|scope| scope == &required) {
+            return Err(Error::Message(format!(
+                "GitHub token is missing required scope '{required}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn graphql(args: GraphqlArgs) -> Result<()> {
+    let variables = match (args.variables, args.variables_file) {
+        (Some(value), None) => {
+            Some(serde_json::from_str::<Value>(&value).map_err(|error| {
+                Error::Message(format!("invalid GraphQL variables JSON: {error}"))
+            })?)
+        }
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(&path)
+                .map_err(|error| Error::io(path.display().to_string(), error))?;
+            Some(serde_json::from_str::<Value>(&text).map_err(|error| {
+                Error::Message(format!(
+                    "invalid GraphQL variables JSON in {}: {error}",
+                    path.display()
+                ))
+            })?)
+        }
+        (None, None) => None,
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents both"),
+    };
+    if variables.as_ref().is_some_and(|value| !value.is_object()) {
+        return Err(Error::Message(
+            "GraphQL variables must be a JSON object".to_owned(),
+        ));
+    }
+
+    let value = with_workflows(|workflows| workflows.graphql(&args.query, variables))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&value).map_err(|error| Error::Message(format!(
+            "failed to render GraphQL response: {error}"
+        )))?
+    );
+    Ok(())
+}
+
+fn checks(args: ChecksArgs) -> Result<()> {
+    with_workflows(|workflows| match args.command {
+        Some(ChecksCommand::Required { branch, repo }) => {
+            let checks = workflows.required_status_checks(repo.as_deref(), &branch)?;
+            println!("branch: {branch}");
+            println!("strict: {}", checks.strict);
+            if checks.contexts.is_empty() {
+                println!("required checks: none");
+            } else {
+                println!("required checks:");
+                for context in &checks.contexts {
+                    println!("  {context}");
+                }
+            }
+            Ok(())
+        }
+        Some(ChecksCommand::Require {
+            contexts,
+            branch,
+            strict,
+            repo,
+        }) => {
+            let checks = workflows.set_required_status_checks(
+                repo.as_deref(),
+                &branch,
+                &contexts,
+                strict,
+            )?;
+            println!(
+                "branch {} now requires: {}",
+                branch,
+                checks.contexts.join(", ")
+            );
+            Ok(())
+        }
+        None => {
+            for check in workflows.check_runs(args.repo.as_deref(), args.reference.as_deref())? {
+                println!(
+                    "{:<12} {:<14} {:<30} {}",
+                    check.status,
+                    check.conclusion.unwrap_or_else(|| "-".to_owned()),
+                    check.name,
+                    check.html_url.unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+    })
 }
 
 fn status() -> Result<()> {

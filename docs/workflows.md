@@ -1,7 +1,6 @@
 # CVX workflows
 
-These diagrams describe the implemented local workflow. Remote and GitHub
-flows are marked as planned.
+These diagrams describe the implemented local, remote and GitHub workflows.
 
 ## Initialize a repository
 
@@ -181,6 +180,43 @@ sequenceDiagram
     CVX->>Remote: negotiate and send pack
     Remote-->>CVX: update accepted
     CVX-->>Dev: pushed
+```
+
+## GitHub OAuth and collaboration
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant CLI as cvx github
+    participant GitHub
+    participant Store as credential store
+
+    Dev->>CLI: login --oauth --client-id ID
+    CLI->>GitHub: POST /login/device/code
+    GitHub-->>CLI: user code and verification URL
+    CLI-->>Dev: open URL and enter code
+    loop until authorized
+        CLI->>GitHub: POST /login/oauth/access_token
+        GitHub-->>CLI: pending / token
+    end
+    CLI->>Store: store token securely
+    CLI->>GitHub: GET /user with token
+    CLI-->>Dev: authenticated as login
+
+    Dev->>CLI: issue create --assignee alice --milestone 1
+    CLI->>GitHub: REST issue request
+    GitHub-->>CLI: issue
+    CLI-->>Dev: issue URL
+
+    Dev->>CLI: pr threads 42
+    CLI->>GitHub: GraphQL reviewThreads
+    GitHub-->>CLI: threads and comments
+    CLI-->>Dev: thread ids and state
+
+    Dev->>CLI: pr resolve THREAD_ID
+    CLI->>GitHub: GraphQL resolveReviewThread
+    GitHub-->>CLI: resolved state
 ```
 
 ## GitHub workflows

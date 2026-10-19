@@ -115,6 +115,29 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | GraphQL | Not implemented | |
 | Replace refs and grafts | Not implemented | |
 
+## GitHub integration
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Token login/logout/status | Yes | Keychain or user-only `0600` fallback |
+| OAuth device flow | Yes | Requires `CVX_GITHUB_CLIENT_ID` or `--client-id` |
+| OAuth scope inspection | Yes | `cvx github scopes --require <scope>` |
+| Repository create/delete/show | Yes | |
+| Collaborators and permissions | Yes | List/add/remove/effective permission |
+| Issues and assignees | Yes | Create/list/close/assign/unassign |
+| Milestones | Yes | List/create/close and issue assignment |
+| Pull requests and reviews | Yes | Create/list/review/merge |
+| Review threads | Yes | GraphQL listing and resolve/unresolve |
+| Check runs | Yes | First 100 runs |
+| Required status checks | Yes | Requires existing branch protection |
+| Labels | Yes | List/create/delete/assign/remove |
+| Releases and assets | Yes | Create/list/upload/delete assets |
+| Workflow-run visibility | Yes | First 30 runs |
+| Generic GraphQL | Yes | Inline or file variables |
+| Automatic pagination | No | First page only for list endpoints |
+| OAuth browser callback | No | Device flow only |
+| GitHub App installation tokens | No | User tokens only |
+
 ## Test oracle
 
 The official `git` binary is used only by tests and CI. It is not invoked by

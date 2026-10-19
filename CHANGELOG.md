@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Phase 4 GitHub integration continues._
+_Phase 5 release quality is next._
+
+## [0.3.0] - 2026-10-19
+
+### Added
+
+- GitHub OAuth device flow with configurable client id and scopes.
+- `cvx github scopes` with required-scope checks using GitHub's OAuth headers.
+- Repository collaborator listing, add, remove and effective permission lookup.
+- Pull-request review-thread listing through GraphQL, plus resolve and unresolve.
+- Required status-check inspection and replacement for protected branches.
+- Issue and pull-request assignees, including add and remove operations.
+- Milestone listing, creation and closing, plus milestone assignment on issues.
+- Generic `cvx github graphql` queries with inline or file-based variables.
+- Release asset listing, upload, clobber protection and deletion.
+- Release creation with automatic asset uploads.
+- GitHub CLI help coverage and OAuth/device-flow parser tests.
+- The CVX repository now dogfoods `.cvx/` and publishes with `cvx push`.
+
+### Changed
+
+- GitHub issue creation accepts assignees and milestones.
+- Version bumped to 0.3.0.
 
 ## [0.2.1] - 2026-10-19
 

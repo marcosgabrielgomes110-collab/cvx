@@ -245,7 +245,10 @@ fn version_reports_engine_formats() {
         .args(["version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("cvx 0.2.1"))
+        .stdout(predicate::str::contains(format!(
+            "cvx {}",
+            env!("CARGO_PKG_VERSION")
+        )))
         .stdout(predicate::str::contains("object format: sha1"));
 }
 

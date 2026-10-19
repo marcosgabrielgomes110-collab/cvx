@@ -225,12 +225,16 @@ pub struct GithubArgs {
 /// GitHub subcommands.
 #[derive(Debug, Subcommand)]
 pub enum GithubCommand {
-    /// Store a GitHub token read from standard input.
-    Login,
+    /// Authenticate with a token or GitHub's OAuth device flow.
+    Login(LoginArgs),
     /// Show the authenticated GitHub account.
     Status,
     /// Remove the stored GitHub token.
     Logout,
+    /// Show the scopes granted to the current token.
+    Scopes(ScopesArgs),
+    /// Execute a GraphQL query.
+    Graphql(GraphqlArgs),
     /// Repository operations.
     Repo {
         /// Repository operation.
@@ -261,17 +265,186 @@ pub enum GithubCommand {
         #[command(subcommand)]
         command: GithubLabelCommand,
     },
-    /// List check runs for a commit or ref.
-    Checks {
-        /// Commit or ref. Defaults to the local HEAD.
-        #[arg(long, value_name = "REF")]
-        reference: Option<String>,
+    /// Collaborator and permission operations.
+    Collaborator {
+        /// Collaborator operation.
+        #[command(subcommand)]
+        command: GithubCollaboratorCommand,
+    },
+    /// Milestone operations.
+    Milestone {
+        /// Milestone operation.
+        #[command(subcommand)]
+        command: GithubMilestoneCommand,
+    },
+    /// Check runs and required status checks.
+    Checks(ChecksArgs),
+    /// List recent GitHub Actions workflow runs.
+    Workflows {
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,
     },
-    /// List recent GitHub Actions workflow runs.
-    Workflows {
+}
+
+/// Arguments for `cvx github login`.
+#[derive(Debug, clap::Args)]
+pub struct LoginArgs {
+    /// Use the OAuth device flow instead of reading a token from stdin.
+    #[arg(long)]
+    pub oauth: bool,
+
+    /// OAuth app client id. Defaults to CVX_GITHUB_CLIENT_ID.
+    #[arg(long, value_name = "CLIENT_ID")]
+    pub client_id: Option<String>,
+
+    /// OAuth scope. May be repeated. Defaults to repo, workflow and read:org.
+    #[arg(long = "scope", value_name = "SCOPE")]
+    pub scopes: Vec<String>,
+}
+
+/// Arguments for `cvx github scopes`.
+#[derive(Debug, clap::Args)]
+pub struct ScopesArgs {
+    /// Fail if one of these scopes is missing.
+    #[arg(long = "require", value_name = "SCOPE")]
+    pub require: Vec<String>,
+}
+
+/// Arguments for `cvx github graphql`.
+#[derive(Debug, clap::Args)]
+pub struct GraphqlArgs {
+    /// GraphQL query string.
+    #[arg(long, value_name = "QUERY")]
+    pub query: String,
+
+    /// JSON object with query variables.
+    #[arg(long, value_name = "JSON")]
+    pub variables: Option<String>,
+
+    /// Read JSON variables from a file.
+    #[arg(long, value_name = "FILE", conflicts_with = "variables")]
+    pub variables_file: Option<PathBuf>,
+}
+
+/// Collaborator operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubCollaboratorCommand {
+    /// List collaborators and their permissions.
+    List {
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Add or update a collaborator.
+    Add {
+        /// GitHub login.
+        #[arg(value_name = "USER")]
+        user: String,
+        /// Permission: pull, triage, push, maintain or admin.
+        #[arg(long, default_value = "push", value_name = "PERMISSION")]
+        permission: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Remove a collaborator.
+    Remove {
+        /// GitHub login.
+        #[arg(value_name = "USER")]
+        user: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Show a collaborator's effective permission.
+    Permission {
+        /// GitHub login.
+        #[arg(value_name = "USER")]
+        user: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// Milestone operations.
+#[derive(Debug, Subcommand)]
+pub enum GithubMilestoneCommand {
+    /// List milestones.
+    List {
+        /// State: open, closed or all.
+        #[arg(long, default_value = "open", value_name = "STATE")]
+        state: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Create a milestone.
+    Create {
+        /// Milestone title.
+        #[arg(value_name = "TITLE")]
+        title: String,
+        /// Description.
+        #[arg(long, value_name = "TEXT")]
+        description: Option<String>,
+        /// Due date in ISO 8601 form.
+        #[arg(long, value_name = "DATE")]
+        due_on: Option<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Close a milestone.
+    Close {
+        /// Milestone number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+}
+
+/// Arguments for `cvx github checks`.
+#[derive(Debug, clap::Args)]
+pub struct ChecksArgs {
+    /// Check operation. Omit to list check runs.
+    #[command(subcommand)]
+    pub command: Option<ChecksCommand>,
+
+    /// Commit or ref for check-run listing. Defaults to the local HEAD.
+    #[arg(long, value_name = "REF")]
+    pub reference: Option<String>,
+
+    /// Repository as owner/name or URL.
+    #[arg(long, value_name = "OWNER/REPO")]
+    pub repo: Option<String>,
+}
+
+/// Required-check operations.
+#[derive(Debug, Subcommand)]
+pub enum ChecksCommand {
+    /// Show required status checks for a branch.
+    Required {
+        /// Branch name.
+        #[arg(long, default_value = "main", value_name = "BRANCH")]
+        branch: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Replace required status checks for a branch.
+    Require {
+        /// Check context. May be repeated.
+        #[arg(value_name = "CONTEXT", required = true)]
+        contexts: Vec<String>,
+        /// Branch name.
+        #[arg(long, default_value = "main", value_name = "BRANCH")]
+        branch: String,
+        /// Require branches to be up to date before merging.
+        #[arg(long)]
+        strict: bool,
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,
@@ -327,6 +500,12 @@ pub enum GithubIssueCommand {
         /// Issue body.
         #[arg(short, long, value_name = "TEXT")]
         body: Option<String>,
+        /// Assignee login. May be repeated.
+        #[arg(long = "assignee", value_name = "USER")]
+        assignees: Vec<String>,
+        /// Milestone number.
+        #[arg(long, value_name = "NUMBER")]
+        milestone: Option<u64>,
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,
@@ -345,6 +524,30 @@ pub enum GithubIssueCommand {
         /// Issue number.
         #[arg(value_name = "NUMBER")]
         number: u64,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Add assignees to an issue or pull request.
+    Assign {
+        /// Issue or pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Assignee login. May be repeated.
+        #[arg(value_name = "USER", required = true)]
+        assignees: Vec<String>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Remove assignees from an issue or pull request.
+    Unassign {
+        /// Issue or pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Assignee login. May be repeated.
+        #[arg(value_name = "USER", required = true)]
+        assignees: Vec<String>,
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,
@@ -422,6 +625,27 @@ pub enum GithubPrCommand {
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,
+    },
+    /// List review threads for a pull request.
+    Threads {
+        /// Pull-request number.
+        #[arg(value_name = "NUMBER")]
+        number: u64,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Resolve a review thread.
+    Resolve {
+        /// Review thread node id from `cvx github pr threads`.
+        #[arg(value_name = "THREAD_ID")]
+        thread_id: String,
+    },
+    /// Unresolve a review thread.
+    Unresolve {
+        /// Review thread node id from `cvx github pr threads`.
+        #[arg(value_name = "THREAD_ID")]
+        thread_id: String,
     },
 }
 
@@ -510,6 +734,48 @@ pub enum GithubReleaseCommand {
         /// Mark the release as a prerelease.
         #[arg(long)]
         prerelease: bool,
+        /// File to upload as a release asset. May be repeated.
+        #[arg(long = "asset", value_name = "PATH")]
+        assets: Vec<PathBuf>,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// List assets attached to a release.
+    Assets {
+        /// Tag name.
+        #[arg(value_name = "TAG")]
+        tag: String,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Upload an asset to a release.
+    Upload {
+        /// Tag name.
+        #[arg(value_name = "TAG")]
+        tag: String,
+        /// File to upload.
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+        /// Override the asset file name.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+        /// Asset label.
+        #[arg(long, value_name = "LABEL")]
+        label: Option<String>,
+        /// Delete an existing asset with the same name first.
+        #[arg(long)]
+        clobber: bool,
+        /// Repository as owner/name or URL.
+        #[arg(long, value_name = "OWNER/REPO")]
+        repo: Option<String>,
+    },
+    /// Delete a release asset by id.
+    DeleteAsset {
+        /// Asset id.
+        #[arg(value_name = "ASSET_ID")]
+        asset_id: u64,
         /// Repository as owner/name or URL.
         #[arg(long, value_name = "OWNER/REPO")]
         repo: Option<String>,

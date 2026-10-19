@@ -10,9 +10,13 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: GitHub alpha.** The local core, navigation, merge, HTTPS/SSH
-> transport and core GitHub workflows are implemented. OAuth, reviews, checks
-> and deeper GitHub automation are still in progress.
+> **Status: Phase 4 complete.** The local core, navigation, merge, HTTPS/SSH
+> transport and GitHub workflows are implemented, including OAuth device flow,
+> collaborators, review threads, required checks, milestones, GraphQL, and
+> release assets. Phase 5 focuses on release quality and hardening.
+>
+> This repository itself is versioned with CVX in `.cvx/` and published with
+> `cvx push`. Git remains only a compatibility test oracle.
 
 ## What works today
 
@@ -49,6 +53,21 @@ $ cvx clone --depth 1 https://github.com/owner/large-repo.git
 $ cvx clone --filter=blob:none https://github.com/owner/large-repo.git
 ```
 
+OAuth device flow and GitHub collaboration workflows:
+
+```console
+$ CVX_GITHUB_CLIENT_ID=... cvx github login --oauth --scope repo --scope workflow
+$ cvx github scopes --require repo
+$ cvx github collaborator list
+$ cvx github milestone create "v1.0" --due-on 2027-01-31
+$ cvx github issue create "Crash on merge" --assignee alice --milestone 1
+$ cvx github pr threads 42
+$ cvx github pr resolve <thread-id>
+$ cvx github checks required --branch main
+$ cvx github graphql --query 'query { viewer { login } }'
+$ cvx github release upload v1.0.0 target/release/cvx --label linux-x64
+```
+
 SSH uses the system OpenSSH client, so keys and `ssh-agent` work as usual.
 `CVX_SSH_KEY` adds an explicit identity file. Credentials prefer the OS
 keychain and fall back to a user-only `0600` file when no keychain is available.
@@ -78,16 +97,21 @@ Implemented:
 - Git credential-helper `fill`, `approve` and `reject` operations;
 - shallow clones (`--depth`) and partial clones (`--filter=blob:none` with
   lazy blob fetch);
-- GitHub login/status/logout, repository create/delete/show, issue
-  create/list/close, pull request create/list/review/merge, check-run listing,
-  labels, release create/list and workflow-run listing;
+- GitHub token and OAuth device-flow login, status, logout and scope
+  inspection;
+- repository create/delete/show, collaborator and permission management;
+- issue create/list/close, assignees and milestones;
+- pull request create/list/review/merge, review threads and thread resolution;
+- GitHub Actions check runs, required status checks and workflow-run listing;
+- labels, releases and release assets, including upload and deletion;
+- generic GraphQL queries with inline or file-based variables;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: GitHub OAuth, repository permissions, review-thread
-resolution, required checks, milestones, GraphQL, release assets, shallow fetch
-updates/unshallow, `--filter` for local paths, SHA-256 repositories, submodules,
-LFS, hooks, commit signing, `.gitattributes` and CRLF normalization.
+Not implemented yet: shallow fetch updates/unshallow, `--filter` for local
+paths, automatic pagination beyond the first 100 entries, SHA-256 repositories,
+submodules, LFS, hooks, commit signing, `.gitattributes`, CRLF normalization,
+fuzzing and full benchmark automation.
 
 ## Design decisions
 
@@ -230,6 +254,7 @@ The benchmark policy and planned scenarios are in
 - [Architecture and Mermaid diagrams](docs/architecture.md)
 - [Workflows and sequence diagrams](docs/workflows.md)
 - [Compatibility matrix](docs/compatibility.md)
+- [GitHub integration](docs/github.md)
 - [Roadmap](docs/roadmap.md)
 - [Repository layout](docs/spec/repository-layout.md)
 - [Detailed design notes](docs/architecture/overview.md)
@@ -262,8 +287,8 @@ use the file backend).
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
-| 4 | GitHub API, auth, pull requests, issues, releases | In progress — core workflows implemented |
-| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
+| 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
+| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Next |
 
 ## Contributing
 
