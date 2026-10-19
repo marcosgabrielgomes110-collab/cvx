@@ -97,10 +97,14 @@ impl NetworkTransport {
 
 /// Returns whether a URL uses the SCP-like `user@host:path` form.
 pub fn looks_like_scp(url: &str) -> bool {
-    if url.contains("://") || url.starts_with('/') {
+    if url.contains("://") || url.starts_with('/') || url.starts_with("\\\\") {
         return false;
     }
     if url.len() > 2 && url.as_bytes()[1] == b':' && url.as_bytes()[0].is_ascii_alphabetic() {
+        return false;
+    }
+    #[cfg(windows)]
+    if std::path::Path::new(url).is_absolute() {
         return false;
     }
     url.split_once(':').is_some_and(|(authority, path)| {
@@ -120,6 +124,8 @@ mod tests {
         assert!(looks_like_scp("git@github.com:owner/repo.git"));
         assert!(looks_like_scp("example.com:repo.git"));
         assert!(!looks_like_scp("C:\\repos\\test"));
+        assert!(!looks_like_scp("\\\\?\\C:\\repos\\test"));
+        assert!(!looks_like_scp("\\\\server\\share\\repo"));
         assert!(!looks_like_scp("/tmp/repo"));
         assert!(!looks_like_scp("https://github.com/owner/repo.git"));
         assert!(!looks_like_scp("relative/path"));

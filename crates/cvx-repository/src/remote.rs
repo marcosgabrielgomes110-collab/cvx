@@ -134,7 +134,8 @@ impl Repository {
         }
         let url = normalize_remote_url(url)?;
         let text = format!(
-            "\n[remote \"{name}\"]\n\turl = {url}\n\tfetch = +refs/heads/*:refs/remotes/{name}/*\n"
+            "\n[remote \"{name}\"]\n\turl = {}\n\tfetch = +refs/heads/*:refs/remotes/{name}/*\n",
+            config_value(&url)
         );
         self.append_config(&text)?;
         Ok(RemoteInfo {
@@ -149,7 +150,10 @@ impl Repository {
         validate_remote_name(name)?;
         let url = normalize_remote_url(url)?;
         if self.remote_url(name)?.is_some() {
-            self.append_config(&format!("\n[remote \"{name}\"]\n\turl = {url}\n"))?;
+            self.append_config(&format!(
+                "\n[remote \"{name}\"]\n\turl = {}\n",
+                config_value(&url)
+            ))?;
         } else {
             self.add_remote(name, &url)?;
         }
@@ -699,7 +703,7 @@ fn finish_clone(
 
     repository.append_config(&format!(
         "\n[remote \"{remote_name}\"]\n\turl = {}\n\tfetch = +refs/heads/*:refs/remotes/{remote_name}/*\n",
-        remote_url.replace('\n', "")
+        config_value(remote_url)
     ))?;
     repository.append_config(&format!(
         "\n[branch \"{branch}\"]\n\tremote = {remote_name}\n\tmerge = refs/heads/{branch}\n"
@@ -767,6 +771,15 @@ fn local_path(url: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(url))
 }
 
+fn config_value(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+    format!("\"{escaped}\"")
+}
+
 fn normalize_remote_url(url: &str) -> Result<String> {
     if url.contains("://") {
         return Ok(url.to_owned());
@@ -791,4 +804,27 @@ fn validate_remote_name(name: &str) -> Result<()> {
         return Err(Error::Message(format!("invalid remote name: {name}")));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_windows_paths_in_config_values() {
+        let value = r"C:\repos\example";
+        let text = format!("[remote \"origin\"]\n\turl = {}\n", config_value(value));
+        let config =
+            cvx_config::Config::parse_str(&text, "test").expect("config should parse");
+        assert_eq!(config.get("remote.origin.url"), Some(value));
+    }
+
+    #[test]
+    fn quotes_urls_with_spaces() {
+        let value = "https://example.com/a b/repo.git";
+        let text = format!("[remote \"origin\"]\n\turl = {}\n", config_value(value));
+        let config =
+            cvx_config::Config::parse_str(&text, "test").expect("config should parse");
+        assert_eq!(config.get("remote.origin.url"), Some(value));
+    }
 }
