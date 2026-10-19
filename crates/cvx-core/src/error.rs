@@ -55,6 +55,13 @@ pub enum Error {
         message: String,
     },
 
+    /// A merge stopped because paths could not be merged automatically.
+    #[error("{message}")]
+    MergeConflicts {
+        /// Human-readable explanation.
+        message: String,
+    },
+
     /// A configuration file could not be parsed or interpreted.
     #[error("configuration error in {path}: {message}")]
     Config {
@@ -119,10 +126,17 @@ impl Error {
         }
     }
 
+    /// Creates a merge-conflict error.
+    pub fn merge_conflicts(message: impl Into<String>) -> Self {
+        Self::MergeConflicts {
+            message: message.into(),
+        }
+    }
+
     /// Returns the process exit code associated with this error.
     pub fn exit_code(&self) -> u8 {
         match self {
-            Self::NothingToCommit { .. } => 1,
+            Self::NothingToCommit { .. } | Self::MergeConflicts { .. } => 1,
             _ => 128,
         }
     }

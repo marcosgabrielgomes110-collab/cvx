@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use cvx_core::{Error, Result};
-use cvx_repository::{Head, Repository, Status, StatusKind, StatusOptions};
+use cvx_repository::{Head, Repository, Status, StatusEntry, StatusKind, StatusOptions};
 
 use crate::cli::{StatusArgs, UntrackedArg};
 
@@ -23,22 +23,58 @@ pub fn run(args: StatusArgs) -> Result<()> {
     Ok(())
 }
 
+struct PorcelainEntry {
+    index: char,
+    worktree: char,
+    old_path: Option<Vec<u8>>,
+}
+
+impl Default for PorcelainEntry {
+    fn default() -> Self {
+        Self {
+            index: ' ',
+            worktree: ' ',
+            old_path: None,
+        }
+    }
+}
+
 fn print_porcelain(status: &Status) {
-    let mut tracked: std::collections::BTreeMap<Vec<u8>, (char, char)> =
+    let mut tracked: std::collections::BTreeMap<Vec<u8>, PorcelainEntry> =
         std::collections::BTreeMap::new();
 
-    for path in &status.conflicts {
-        tracked.insert(path.clone(), ('U', 'U'));
+    for conflict in &status.conflicts {
+        let mut code = conflict.kind.code().chars();
+        tracked.insert(
+            conflict.path.clone(),
+            PorcelainEntry {
+                index: code.next().unwrap_or('U'),
+                worktree: code.next().unwrap_or('U'),
+                old_path: None,
+            },
+        );
     }
     for entry in &status.staged {
-        tracked.entry(entry.path.clone()).or_insert((' ', ' ')).0 = status_code(entry.kind);
+        let tracked_entry = tracked.entry(entry.path.clone()).or_default();
+        tracked_entry.index = status_code(entry.kind);
+        if let Some(old_path) = &entry.old_path {
+            tracked_entry.old_path = Some(old_path.clone());
+        }
     }
     for entry in &status.unstaged {
-        tracked.entry(entry.path.clone()).or_insert((' ', ' ')).1 = status_code(entry.kind);
+        tracked.entry(entry.path.clone()).or_default().worktree = status_code(entry.kind);
     }
 
-    for (path, (index, worktree)) in tracked {
-        println!("{index}{worktree} {}", display_path(&path, false));
+    for (path, entry) in tracked {
+        let display = match entry.old_path {
+            Some(old_path) => format!(
+                "{} -> {}",
+                display_path(&old_path, false),
+                display_path(&path, false)
+            ),
+            None => display_path(&path, false),
+        };
+        println!("{}{} {display}", entry.index, entry.worktree);
     }
     for entry in &status.untracked {
         println!("?? {}", display_path(&entry.path, entry.is_dir));
@@ -65,8 +101,12 @@ fn print_human(status: &Status) {
         println!();
         println!("Unmerged paths:");
         println!("  (fix conflicts and run \"cvx commit\")");
-        for path in &status.conflicts {
-            println!("        both modified:   {}", display_path(path, false));
+        for conflict in &status.conflicts {
+            println!(
+                "        {:<16}{}",
+                format!("{}:", conflict.kind.label()),
+                display_path(&conflict.path, false)
+            );
         }
     }
 
@@ -78,7 +118,7 @@ fn print_human(status: &Status) {
             println!(
                 "        {:<14}{}",
                 format!("{}:", label(entry.kind)),
-                display_path(&entry.path, false)
+                display_entry_path(entry)
             );
         }
     }
@@ -91,7 +131,7 @@ fn print_human(status: &Status) {
             println!(
                 "        {:<14}{}",
                 format!("{}:", label(entry.kind)),
-                display_path(&entry.path, false)
+                display_entry_path(entry)
             );
         }
     }
@@ -121,6 +161,7 @@ fn status_code(kind: StatusKind) -> char {
         StatusKind::Modified => 'M',
         StatusKind::Deleted => 'D',
         StatusKind::TypeChanged => 'T',
+        StatusKind::Renamed => 'R',
     }
 }
 
@@ -130,6 +171,18 @@ fn label(kind: StatusKind) -> &'static str {
         StatusKind::Modified => "modified",
         StatusKind::Deleted => "deleted",
         StatusKind::TypeChanged => "typechange",
+        StatusKind::Renamed => "renamed",
+    }
+}
+
+fn display_entry_path(entry: &StatusEntry) -> String {
+    match &entry.old_path {
+        Some(old_path) => format!(
+            "{} -> {}",
+            display_path(old_path, false),
+            display_path(&entry.path, false)
+        ),
+        None => display_path(&entry.path, false),
     }
 }
 

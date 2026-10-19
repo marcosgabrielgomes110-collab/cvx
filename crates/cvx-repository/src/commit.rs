@@ -58,7 +58,34 @@ struct TreeNode {
 
 impl Repository {
     /// Commits the current index.
+    ///
+    /// When `MERGE_HEAD` exists, the resulting commit records both `HEAD` and
+    /// the merge target as parents, matching Git's merge-commit workflow.
     pub fn commit(&self, options: CommitOptions) -> Result<CommitOutcome> {
+        let merge_head = self.merge_head()?;
+        let head_oid = self.head()?.oid();
+        let mut parents: Vec<ObjectId> = head_oid.into_iter().collect();
+        if let Some(merge_head) = merge_head {
+            parents.push(merge_head);
+        }
+
+        let outcome = self.commit_with_parents(
+            options.messages,
+            parents,
+            options.allow_empty || merge_head.is_some(),
+        )?;
+        if merge_head.is_some() {
+            self.clear_merge_state()?;
+        }
+        Ok(outcome)
+    }
+
+    pub(crate) fn commit_with_parents(
+        &self,
+        messages: Vec<String>,
+        parents: Vec<ObjectId>,
+        allow_empty: bool,
+    ) -> Result<CommitOutcome> {
         let index = self.read_index()?;
         if index.has_conflicts() {
             return Err(Error::Message(
@@ -67,34 +94,33 @@ impl Repository {
         }
 
         let tree = self.build_tree(&index)?;
-        let head = self.head()?;
-        let parent_oid = head.oid();
-        let parent_commit = match parent_oid {
-            Some(oid) => Some(self.read_commit(oid)?),
+        let head_oid = self.head()?.oid();
+        let parent_commit = match parents.first() {
+            Some(oid) => Some(self.read_commit(*oid)?),
             None => None,
         };
-        let root = parent_oid.is_none();
+        let root = parents.is_empty();
 
         if let Some(parent) = &parent_commit {
-            if parent.tree == tree && !options.allow_empty {
+            if parent.tree == tree && !allow_empty {
                 return Err(Error::nothing_to_commit(
                     "nothing to commit, working tree clean",
                 ));
             }
-        } else if index.is_empty() && !options.allow_empty {
+        } else if index.is_empty() && !allow_empty {
             return Err(Error::nothing_to_commit(
                 "nothing to commit (create/copy files and use \"cvx add\" to track)",
             ));
         }
 
-        let message = commit_message(&options.messages)?;
+        let message = commit_message(&messages)?;
         let author = self.resolve_signature(IdentityRole::Author)?;
         let committer = self.resolve_signature(IdentityRole::Committer)?;
         let subject = message.lines().next().unwrap_or("").trim_end().to_owned();
 
         let commit = Commit {
             tree,
-            parents: parent_oid.into_iter().collect(),
+            parents: parents.clone(),
             author,
             committer: committer.clone(),
             message,
@@ -104,7 +130,14 @@ impl Repository {
             .objects()
             .write(ObjectKind::Commit, &commit.serialize())?;
 
-        let branch = self.update_head_for_commit(oid, parent_oid, &committer, &subject, root)?;
+        let branch = self.update_head_for_commit(
+            oid,
+            head_oid,
+            &committer,
+            &subject,
+            root,
+            parents.len() > 1,
+        )?;
 
         Ok(CommitOutcome {
             oid,
@@ -208,10 +241,13 @@ impl Repository {
         committer: &Signature,
         subject: &str,
         root: bool,
+        merge: bool,
     ) -> Result<Option<String>> {
         let head = self.head()?;
         let message = if root {
             format!("commit (initial): {subject}")
+        } else if merge {
+            format!("commit (merge): {subject}")
         } else {
             format!("commit: {subject}")
         };

@@ -10,8 +10,8 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: local workflow alpha.** The local core and navigation workflow are
-> implemented. Network operations, merges and GitHub integration are not
+> **Status: local workflow alpha.** The local core, navigation and merge
+> workflows are implemented. Network operations and GitHub integration are not
 > available yet. Commands are announced here as they become usable.
 
 ## What works today
@@ -27,6 +27,9 @@ $ cvx restore --staged file.rs
 $ cvx checkout -- file.rs
 $ cvx branch feature/auth
 $ cvx switch feature/auth
+$ cvx merge main
+$ cvx tag -a v1.0.0 -m "first release"
+$ cvx log --oneline --decorate
 ```
 
 Implemented:
@@ -36,13 +39,18 @@ Implemented:
 - index versions 2 through 4 on input;
 - refs, packed refs, detached HEAD and reflogs;
 - `init`, `add`, `commit`, `status`, `log`, `diff`, `restore`, `checkout`,
-  `branch` and `switch`;
+  `branch`, `switch`, `merge` and `tag`;
+- three-way merges, conflict markers, index stages 1/2/3 and merge commits with
+  two parents;
+- `merge --abort` and `merge --continue`;
+- annotated and lightweight tags, plus `log --decorate`;
+- rename detection in `status` and `diff`;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: clone/fetch/push, merge/conflicts, tags creation, GitHub
-authentication and APIs, SHA-256 repositories, submodules, LFS, hooks, commit
-signing, `.gitattributes` and CRLF normalization.
+Not implemented yet: clone/fetch/push, GitHub authentication and APIs, SHA-256
+repositories, submodules, LFS, hooks, commit signing, `.gitattributes` and
+CRLF normalization.
 
 ## Design decisions
 
@@ -73,6 +81,7 @@ flowchart LR
     Repo --> Refs["cvx-ref"]
     Repo --> Revision["cvx-revision"]
     Repo --> Diff["cvx-diff"]
+    Repo --> Merge["cvx-merge"]
     Repo --> Worktree["cvx-worktree"]
     ODB --> Pack["cvx-pack"]
     Worktree --> Ignore["cvx-ignore"]
@@ -127,12 +136,14 @@ mode, including repositories packed by `git gc`.
 | `cvx add <PATH>...` | `-A/--all`, `-u/--update`, `-f/--force` |
 | `cvx commit -m <MSG>` | Repeat `-m` for paragraphs; `--allow-empty` |
 | `cvx status` | `--porcelain`, `--short`, `--untracked-files=no\|normal\|all` |
-| `cvx log [REVISION]` | `--oneline`, `-n/--max-count` |
-| `cvx diff [REV...] [-- PATH...]` | `--cached`, `--stat`, `-U<n>` |
+| `cvx log [REVISION]` | `--oneline`, `-n/--max-count`, `--decorate` |
+| `cvx diff [REV...] [-- PATH...]` | `--cached`, `--stat`, `-U<n>`, rename detection |
 | `cvx restore <PATH>...` | `--staged`, `--worktree`, `--source`, `--force` |
 | `cvx checkout -- <PATH>...` | Restore worktree files from the index |
 | `cvx branch [NAME] [START]` | `--list`, `-d`, `-D` |
 | `cvx switch <BRANCH>` | `-c`, `--detach`, `--force` |
+| `cvx merge <REVISION>` | `-m`, `--continue`, `--abort` |
+| `cvx tag [NAME] [TARGET]` | `-l/--list`, `-a/--annotate`, `-m`, `-f/--force` |
 | `cvx version` | Engine and repository format information |
 
 ## Benchmarks
@@ -191,8 +202,8 @@ does not.
 | 0 | Specification, architecture, compatibility contract | Complete |
 | 1 | Local core: objects, index, refs, commits, status, log | Complete |
 | 2A | Diff, restore/checkout, branches, switch | Complete |
-| 2B | Merge, conflicts, tags creation, rename detection | Next |
-| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Planned |
+| 2B | Merge, conflicts, tags creation, rename detection | Complete |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Next |
 | 4 | GitHub API, auth, pull requests, issues, releases | Planned |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 

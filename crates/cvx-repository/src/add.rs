@@ -120,7 +120,7 @@ impl Repository {
                 }) {
                     continue;
                 }
-                if options.update && index.get_stage(&relative, 0).is_none() {
+                if options.update && index.get(&relative).is_none() {
                     continue;
                 }
                 if seen.insert(relative.clone()) {
@@ -133,7 +133,7 @@ impl Repository {
             if spec.kind != PathspecKind::File {
                 continue;
             }
-            if options.update && index.get_stage(&spec.relative, 0).is_none() {
+            if options.update && index.get(&spec.relative).is_none() {
                 continue;
             }
             if seen.insert(spec.relative.clone()) {
@@ -258,6 +258,13 @@ impl Repository {
         let entry = IndexEntry::from_metadata(relative.clone(), oid, &metadata, filemode)?;
         let mode = entry.mode;
         let previous = index.get_stage(&relative, 0).cloned();
+        if index
+            .entries()
+            .iter()
+            .any(|entry| entry.path == relative && entry.stage != 0)
+        {
+            index.remove_path(&relative);
+        }
         index.insert(entry)?;
 
         match previous {

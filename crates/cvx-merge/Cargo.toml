@@ -13,6 +13,7 @@ cvx-core = { workspace = true }
 cvx-diff = { workspace = true }
 cvx-index = { workspace = true }
 cvx-object = { workspace = true }
+similar = { workspace = true }
 
 [lints]
 workspace = true

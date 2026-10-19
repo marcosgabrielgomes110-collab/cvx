@@ -319,6 +319,7 @@ dependencies = [
  "cvx-diff",
  "cvx-index",
  "cvx-object",
+ "similar",
 ]
 
 [[package]]
@@ -379,6 +380,7 @@ dependencies = [
  "cvx-diff",
  "cvx-ignore",
  "cvx-index",
+ "cvx-merge",
  "cvx-object",
  "cvx-odb",
  "cvx-ref",

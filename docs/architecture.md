@@ -23,6 +23,7 @@ flowchart TB
         Repo --> Refs["cvx-ref"]
         Repo --> Revision["cvx-revision"]
         Repo --> Diff["cvx-diff"]
+        Repo --> Merge["cvx-merge"]
         Repo --> Worktree["cvx-worktree"]
         ODB --> Pack["cvx-pack"]
         Worktree --> Ignore["cvx-ignore"]
@@ -84,6 +85,10 @@ flowchart LR
     Worktree --> Index
     Worktree --> Ignore
     Diff --> Object
+    Merge --> Object
+    Merge --> Index
+    Merge --> Diff
+    Repo --> Merge
     Repo --> ODB
     Repo --> Index
     Repo --> Refs
@@ -163,6 +168,14 @@ classDiagram
         +offset_minutes
     }
 
+    class Tag {
+        +object
+        +kind
+        +name
+        +tagger
+        +message
+    }
+
     class Index {
         +entries
         +parse()
@@ -181,6 +194,8 @@ classDiagram
     TreeEntry --> ObjectId
     Commit --> ObjectId
     Commit --> Signature
+    Tag --> ObjectId
+    Tag --> Signature
     Index "1" o-- "0..*" IndexEntry
     IndexEntry --> ObjectId
 ```
@@ -263,6 +278,49 @@ sequenceDiagram
         Repo->>Refs: update HEAD symbolically
         Repo->>Refs: append HEAD reflog
         Repo-->>CLI: switched
+    end
+```
+
+## Merge flow
+
+`cvx merge` compares the merge base with both tips. Non-overlapping changes are
+combined, while conflicting paths receive markers in the worktree and stages
+1/2/3 in the index. A clean merge creates a two-parent commit; conflicts leave
+`MERGE_HEAD` and `MERGE_MSG` behind for `--continue` or `--abort`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant CLI as cvx-cli
+    participant Repo as cvx-repository
+    participant Rev as cvx-revision
+    participant Merge as cvx-merge
+    participant Index as index.lock
+    participant WT as worktree
+    participant ODB as cvx-odb
+
+    Dev->>CLI: cvx merge feature
+    CLI->>Repo: merge(revision)
+    Repo->>Repo: check clean index and worktree
+    Repo->>Rev: merge_base(HEAD, feature)
+    alt target is ancestor
+        Repo-->>CLI: already up to date
+    else HEAD is ancestor
+        Repo->>WT: fast-forward worktree
+        Repo->>Index: publish target index
+        Repo-->>CLI: Fast-forward
+    else diverged
+        Repo->>Merge: merge files (base, ours, theirs)
+        alt clean
+            Repo->>ODB: write merged blobs and commit
+            Repo-->>CLI: merge commit
+        else conflicts
+            Repo->>WT: write conflict markers
+            Repo->>Index: write stages 1/2/3
+            Repo->>Repo: write MERGE_HEAD and MERGE_MSG
+            Repo-->>CLI: conflict paths
+        end
     end
 ```
 

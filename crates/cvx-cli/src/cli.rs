@@ -52,6 +52,12 @@ pub enum Command {
     /// Switch branches or detach HEAD.
     Switch(SwitchArgs),
 
+    /// Join another branch's history into the current branch.
+    Merge(MergeArgs),
+
+    /// Create or list tags.
+    Tag(TagArgs),
+
     /// Print version and format information.
     Version,
 }
@@ -151,6 +157,10 @@ pub struct LogArgs {
     /// One line per commit.
     #[arg(long)]
     pub oneline: bool,
+
+    /// Show branch and tag decorations.
+    #[arg(long)]
+    pub decorate: bool,
 }
 
 /// Arguments for `cvx diff`.
@@ -250,6 +260,54 @@ pub struct SwitchArgs {
 
     /// Branch name or revision.
     #[arg(value_name = "BRANCH")]
+    pub target: Option<String>,
+}
+
+/// Arguments for `cvx merge`.
+#[derive(Debug, clap::Args)]
+pub struct MergeArgs {
+    /// Abort an in-progress merge.
+    #[arg(long, conflicts_with = "continue_merge")]
+    pub abort: bool,
+
+    /// Conclude an in-progress merge after resolving conflicts.
+    #[arg(long = "continue", conflicts_with = "abort")]
+    pub continue_merge: bool,
+
+    /// Merge-commit message.
+    #[arg(short, long, value_name = "MESSAGE")]
+    pub message: Option<String>,
+
+    /// Branch or revision to merge.
+    #[arg(value_name = "REVISION")]
+    pub revision: Option<String>,
+}
+
+/// Arguments for `cvx tag`.
+#[derive(Debug, clap::Args)]
+pub struct TagArgs {
+    /// List tags.
+    #[arg(short, long)]
+    pub list: bool,
+
+    /// Create an annotated tag.
+    #[arg(short, long)]
+    pub annotate: bool,
+
+    /// Replace an existing tag.
+    #[arg(short, long)]
+    pub force: bool,
+
+    /// Annotated-tag message.
+    #[arg(short, long, value_name = "MESSAGE")]
+    pub message: Option<String>,
+
+    /// Tag name.
+    #[arg(value_name = "NAME")]
+    pub name: Option<String>,
+
+    /// Commit to tag. Defaults to HEAD.
+    #[arg(value_name = "TARGET")]
     pub target: Option<String>,
 }
 

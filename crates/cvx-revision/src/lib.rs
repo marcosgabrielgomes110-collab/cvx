@@ -7,7 +7,8 @@
 #![forbid(unsafe_code)]
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
 use cvx_core::Result;
 use cvx_object::{Commit, ObjectId};
@@ -101,6 +102,139 @@ where
     Ok(entries)
 }
 
+/// Returns whether `ancestor` is reachable from `descendant`.
+pub fn is_ancestor<F>(ancestor: ObjectId, descendant: ObjectId, mut read: F) -> Result<bool>
+where
+    F: FnMut(ObjectId) -> Result<Commit>,
+{
+    if ancestor == descendant {
+        return Ok(true);
+    }
+
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::from([descendant]);
+    visited.insert(descendant);
+
+    while let Some(oid) = queue.pop_front() {
+        let commit = read(oid)?;
+        for parent in commit.parents {
+            if parent == ancestor {
+                return Ok(true);
+            }
+            if visited.insert(parent) {
+                queue.push_back(parent);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+/// Finds the best common ancestor of two commits.
+///
+/// The result is the common ancestor with the smallest combined distance from
+/// both tips. Ancestors that are themselves reachable from another common
+/// ancestor are discarded, so criss-cross histories return a lowest common
+/// ancestor instead of an arbitrary older commit.
+pub fn merge_base<F>(left: ObjectId, right: ObjectId, mut read: F) -> Result<Option<ObjectId>>
+where
+    F: FnMut(ObjectId) -> Result<Commit>,
+{
+    if left == right {
+        return Ok(Some(left));
+    }
+
+    let mut cache = HashMap::new();
+    let left_distances = ancestor_distances(left, &mut read, &mut cache)?;
+    let right_distances = ancestor_distances(right, &mut read, &mut cache)?;
+
+    let common: Vec<ObjectId> = left_distances
+        .keys()
+        .filter(|oid| right_distances.contains_key(*oid))
+        .copied()
+        .collect();
+    if common.is_empty() {
+        return Ok(None);
+    }
+
+    let common_set: HashSet<ObjectId> = common.iter().copied().collect();
+    let mut ancestor_sets: HashMap<ObjectId, HashSet<ObjectId>> = HashMap::new();
+    for oid in &common {
+        ancestor_sets.insert(*oid, ancestor_set(*oid, &mut read, &mut cache)?);
+    }
+
+    let mut candidates: Vec<ObjectId> = common
+        .into_iter()
+        .filter(|candidate| {
+            !common_set.iter().any(|other| {
+                other != candidate
+                    && ancestor_sets
+                        .get(other)
+                        .is_some_and(|ancestors| ancestors.contains(candidate))
+            })
+        })
+        .collect();
+
+    candidates.sort_by_key(|oid| (left_distances[oid] + right_distances[oid], *oid));
+    Ok(candidates.first().copied())
+}
+
+fn ancestor_distances<F>(
+    start: ObjectId,
+    read: &mut F,
+    cache: &mut HashMap<ObjectId, Commit>,
+) -> Result<HashMap<ObjectId, usize>>
+where
+    F: FnMut(ObjectId) -> Result<Commit>,
+{
+    let mut distances = HashMap::new();
+    let mut queue = VecDeque::from([(start, 0usize)]);
+    distances.insert(start, 0);
+
+    while let Some((oid, distance)) = queue.pop_front() {
+        if let Entry::Vacant(entry) = cache.entry(oid) {
+            entry.insert(read(oid)?);
+        }
+        let parents = cache[&oid].parents.clone();
+        for parent in parents {
+            if let Entry::Vacant(entry) = distances.entry(parent) {
+                entry.insert(distance + 1);
+                queue.push_back((parent, distance + 1));
+            }
+        }
+    }
+
+    Ok(distances)
+}
+
+fn ancestor_set<F>(
+    start: ObjectId,
+    read: &mut F,
+    cache: &mut HashMap<ObjectId, Commit>,
+) -> Result<HashSet<ObjectId>>
+where
+    F: FnMut(ObjectId) -> Result<Commit>,
+{
+    let mut ancestors = HashSet::new();
+    let mut queue = VecDeque::from([start]);
+
+    while let Some(oid) = queue.pop_front() {
+        if !ancestors.insert(oid) {
+            continue;
+        }
+        if let Entry::Vacant(entry) = cache.entry(oid) {
+            entry.insert(read(oid)?);
+        }
+        for parent in &cache[&oid].parents {
+            if !ancestors.contains(parent) {
+                queue.push_back(*parent);
+            }
+        }
+    }
+
+    Ok(ancestors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +284,55 @@ mod tests {
         let entries = walk_commits(child, Some(1), |id| Ok(commits[&id].clone())).expect("walk");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].oid, child);
+    }
+
+    #[test]
+    fn finds_merge_base_for_linear_and_diverged_history() {
+        let root = oid(1);
+        let left = oid(2);
+        let right = oid(3);
+        let commits = HashMap::from([
+            (root, commit(Vec::new(), 10)),
+            (left, commit(vec![root], 20)),
+            (right, commit(vec![root], 21)),
+        ]);
+
+        let base = merge_base(left, right, |id| Ok(commits[&id].clone())).expect("merge base");
+        assert_eq!(base, Some(root));
+
+        let base = merge_base(root, left, |id| Ok(commits[&id].clone())).expect("merge base");
+        assert_eq!(base, Some(root));
+    }
+
+    #[test]
+    fn detects_ancestry() {
+        let root = oid(1);
+        let child = oid(2);
+        let other = oid(3);
+        let commits = HashMap::from([
+            (root, commit(Vec::new(), 10)),
+            (child, commit(vec![root], 20)),
+            (other, commit(Vec::new(), 30)),
+        ]);
+
+        assert!(is_ancestor(root, child, |id| Ok(commits[&id].clone())).expect("ancestor check"));
+        assert!(!is_ancestor(child, root, |id| Ok(commits[&id].clone())).expect("ancestor check"));
+        assert!(!is_ancestor(root, other, |id| Ok(commits[&id].clone())).expect("ancestor check"));
+    }
+
+    #[test]
+    fn merge_base_of_unrelated_history_is_none() {
+        let left = oid(1);
+        let right = oid(2);
+        let commits = HashMap::from([
+            (left, commit(Vec::new(), 10)),
+            (right, commit(Vec::new(), 20)),
+        ]);
+
+        assert_eq!(
+            merge_base(left, right, |id| Ok(commits[&id].clone())).expect("merge base"),
+            None
+        );
     }
 
     #[test]

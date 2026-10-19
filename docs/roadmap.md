@@ -8,8 +8,8 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 0 | Specification, architecture, compatibility contract | Complete |
 | 1 | Objects, index, refs, commits, status, log, pack reads | Complete |
 | 2A | Diff, restore/checkout, branches, switch | Complete |
-| 2B | Merge, conflicts, tags creation, rename detection | Next |
-| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Planned |
+| 2B | Merge, conflicts, tags creation, rename detection | Complete |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Next |
 | 4 | GitHub API, auth, pull requests, issues, releases | Planned |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 

@@ -13,18 +13,33 @@ pub fn run(args: LogArgs) -> Result<()> {
         revision: args.revision,
         limit: args.max_count,
     })?;
+    let decorations = if args.decorate {
+        repository.decorations()?
+    } else {
+        std::collections::BTreeMap::new()
+    };
 
     for (index, entry) in entries.iter().enumerate() {
         if index > 0 && !args.oneline {
             println!();
         }
 
+        let decoration = decorations
+            .get(&entry.oid)
+            .map(|labels| format!(" ({})", labels.join(", ")))
+            .unwrap_or_default();
+
         if args.oneline {
-            println!("{} {}", entry.oid.short(7), entry.commit.subject());
+            println!(
+                "{} {}{}",
+                entry.oid.short(7),
+                entry.commit.subject(),
+                decoration
+            );
             continue;
         }
 
-        println!("commit {}", entry.oid);
+        println!("commit {}{decoration}", entry.oid);
         if entry.commit.parents.len() > 1 {
             let parents: Vec<String> = entry
                 .commit

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cvx merge` with fast-forward and three-way merges, including merge commits
+  with two parents.
+- Conflict markers in the worktree, index stages 1/2/3 and precise porcelain
+  conflict codes (`UU`, `AA`, `DU`, `UD`, `AU`, `UA`).
+- `cvx merge --abort` and `cvx merge --continue`, backed by `MERGE_HEAD`,
+  `MERGE_MSG` and `ORIG_HEAD`.
+- `cvx tag` with lightweight and annotated tags, listing and force updates.
+- `cvx log --decorate` for local branches and tags.
+- Rename detection in `cvx status` and `cvx diff`.
 - `cvx diff` for worktree/index, `--cached`, revision-to-revision, pathspecs
   and `--stat` output.
 - `cvx restore` with staged and worktree modes, `--source` revisions and
@@ -25,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `cvx status` now reports staged renames and precise unmerged status codes
+  (`UU`, `AA`, `DU`, `UD`, `AU`, `UA`).
 - `cvx status` now ignores executable-bit differences when
   `core.filemode=false`.
 - The README now documents the complete local workflow and architecture.

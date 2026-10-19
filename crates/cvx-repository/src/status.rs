@@ -38,6 +38,8 @@ pub struct StatusEntry {
     pub path: Vec<u8>,
     /// Kind of change.
     pub kind: StatusKind,
+    /// Original path when the entry is a rename.
+    pub old_path: Option<Vec<u8>>,
 }
 
 /// Kind of change reported by status.
@@ -51,6 +53,60 @@ pub enum StatusKind {
     Deleted,
     /// File type changed, for example file to symlink.
     TypeChanged,
+    /// Path was renamed, with the original path in [`StatusEntry::old_path`].
+    Renamed,
+}
+
+/// Why a path is unmerged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictKind {
+    /// Base, ours and theirs exist and all differ.
+    BothModified,
+    /// Ours and theirs were added independently.
+    BothAdded,
+    /// Ours deleted the file while theirs modified it.
+    DeletedByUs,
+    /// Theirs deleted the file while ours modified it.
+    DeletedByThem,
+    /// Only our side added the path.
+    AddedByUs,
+    /// Only their side added the path.
+    AddedByThem,
+}
+
+impl ConflictKind {
+    /// Returns the two-letter porcelain status code.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::BothModified => "UU",
+            Self::BothAdded => "AA",
+            Self::DeletedByUs => "DU",
+            Self::DeletedByThem => "UD",
+            Self::AddedByUs => "AU",
+            Self::AddedByThem => "UA",
+        }
+    }
+
+    /// Returns the human-readable status label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::BothModified => "both modified",
+            Self::BothAdded => "both added",
+            Self::DeletedByUs => "deleted by us",
+            Self::DeletedByThem => "deleted by them",
+            Self::AddedByUs => "added by us",
+            Self::AddedByThem => "added by them",
+        }
+    }
+}
+
+/// One unmerged path in the index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictEntry {
+    /// Repository-relative path bytes.
+    pub path: Vec<u8>,
+    /// Conflict shape derived from the index stages.
+    pub kind: ConflictKind,
 }
 
 /// An untracked path.
@@ -78,7 +134,7 @@ pub struct Status {
     /// Untracked paths.
     pub untracked: Vec<UntrackedEntry>,
     /// Paths with unmerged index stages.
-    pub conflicts: Vec<Vec<u8>>,
+    pub conflicts: Vec<ConflictEntry>,
 }
 
 impl Status {
@@ -121,6 +177,15 @@ impl Repository {
             .filter(|entry| entry.stage != 0)
             .map(|entry| entry.path.clone())
             .collect();
+        let mut conflict_stages: BTreeMap<Vec<u8>, [bool; 3]> = BTreeMap::new();
+        for entry in index.entries().iter().filter(|entry| entry.stage != 0) {
+            let stages = conflict_stages
+                .entry(entry.path.clone())
+                .or_insert([false; 3]);
+            if (1..=3).contains(&entry.stage) {
+                stages[usize::from(entry.stage) - 1] = true;
+            }
+        }
         let index_stage0: BTreeMap<Vec<u8>, &IndexEntry> = index
             .entries()
             .iter()
@@ -198,15 +263,121 @@ impl Repository {
             Vec::new()
         };
 
+        let conflicts = conflict_stages
+            .into_iter()
+            .map(|(path, stages)| ConflictEntry {
+                path,
+                kind: conflict_kind(stages),
+            })
+            .collect();
+
         Ok(Status {
             head,
             branch,
             unborn,
-            staged: into_entries(staged),
+            staged: self.detect_staged_renames(staged, &head_leaves, &index_stage0)?,
             unstaged: into_entries(unstaged),
             untracked,
-            conflicts: conflict_paths.into_iter().collect(),
+            conflicts,
         })
+    }
+
+    fn detect_staged_renames(
+        &self,
+        staged: BTreeMap<Vec<u8>, StatusKind>,
+        head: &BTreeMap<Vec<u8>, TreeLeaf>,
+        index: &BTreeMap<Vec<u8>, &IndexEntry>,
+    ) -> Result<Vec<StatusEntry>> {
+        let deleted: Vec<Vec<u8>> = staged
+            .iter()
+            .filter(|(_, kind)| matches!(kind, StatusKind::Deleted))
+            .map(|(path, _)| path.clone())
+            .collect();
+        let added: Vec<Vec<u8>> = staged
+            .iter()
+            .filter(|(_, kind)| matches!(kind, StatusKind::Added))
+            .map(|(path, _)| path.clone())
+            .collect();
+
+        let mut candidates = Vec::new();
+        for (deleted_index, old_path) in deleted.iter().enumerate() {
+            let Some(old_leaf) = head.get(old_path) else {
+                continue;
+            };
+            let Some(old_object) = self.object_content(old_leaf.oid)? else {
+                continue;
+            };
+            for (added_index, new_path) in added.iter().enumerate() {
+                let Some(new_entry) = index.get(new_path) else {
+                    continue;
+                };
+                let Some(new_object) = self.object_content(new_entry.oid)? else {
+                    continue;
+                };
+                let score = cvx_diff::similarity(&old_object, &new_object);
+                if score >= 0.5 {
+                    candidates.push((score, deleted_index, added_index));
+                }
+            }
+        }
+        candidates.sort_by(|left, right| {
+            right
+                .0
+                .partial_cmp(&left.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| deleted[left.1].cmp(&deleted[right.1]))
+                .then_with(|| added[left.2].cmp(&added[right.2]))
+        });
+
+        let mut deleted_used = vec![false; deleted.len()];
+        let mut added_used = vec![false; added.len()];
+        let mut renames = Vec::new();
+        for (_, deleted_index, added_index) in candidates {
+            if deleted_used[deleted_index] || added_used[added_index] {
+                continue;
+            }
+            deleted_used[deleted_index] = true;
+            added_used[added_index] = true;
+            renames.push((added[added_index].clone(), deleted[deleted_index].clone()));
+        }
+
+        let renamed_from: BTreeSet<Vec<u8>> = renames
+            .iter()
+            .map(|(_, old_path)| old_path.clone())
+            .collect();
+        let renamed_to: BTreeSet<Vec<u8>> = renames
+            .iter()
+            .map(|(new_path, _)| new_path.clone())
+            .collect();
+
+        let mut entries = Vec::new();
+        for (path, kind) in staged {
+            if matches!(kind, StatusKind::Deleted) && renamed_from.contains(&path) {
+                continue;
+            }
+            if matches!(kind, StatusKind::Added) && renamed_to.contains(&path) {
+                continue;
+            }
+            entries.push(StatusEntry {
+                path,
+                kind,
+                old_path: None,
+            });
+        }
+        for (new_path, old_path) in renames {
+            entries.push(StatusEntry {
+                path: new_path,
+                kind: StatusKind::Renamed,
+                old_path: Some(old_path),
+            });
+        }
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+        Ok(entries)
+    }
+
+    fn object_content(&self, oid: ObjectId) -> Result<Option<Vec<u8>>> {
+        let object = self.read_object(oid)?;
+        Ok((object.kind == ObjectKind::Blob).then_some(object.data))
     }
 
     fn collect_untracked(
@@ -275,8 +446,24 @@ impl Repository {
 fn into_entries(entries: BTreeMap<Vec<u8>, StatusKind>) -> Vec<StatusEntry> {
     entries
         .into_iter()
-        .map(|(path, kind)| StatusEntry { path, kind })
+        .map(|(path, kind)| StatusEntry {
+            path,
+            kind,
+            old_path: None,
+        })
         .collect()
+}
+
+fn conflict_kind(stages: [bool; 3]) -> ConflictKind {
+    match stages {
+        [true, true, true] => ConflictKind::BothModified,
+        [false, true, true] => ConflictKind::BothAdded,
+        [true, false, true] => ConflictKind::DeletedByUs,
+        [true, true, false] => ConflictKind::DeletedByThem,
+        [false, true, false] => ConflictKind::AddedByUs,
+        [false, false, true] => ConflictKind::AddedByThem,
+        _ => ConflictKind::BothModified,
+    }
 }
 
 fn compare_head_and_index(leaf: &TreeLeaf, entry: &IndexEntry) -> Option<StatusKind> {

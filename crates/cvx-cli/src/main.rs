@@ -42,6 +42,8 @@ fn run(cli: Cli) -> Result<()> {
         Command::Checkout(args) => commands::checkout::run(args),
         Command::Branch(args) => commands::branch::run(args),
         Command::Switch(args) => commands::switch::run(args),
+        Command::Merge(args) => commands::merge::run(args),
+        Command::Tag(args) => commands::tag::run(args),
         Command::Version => {
             commands::version::run();
             Ok(())

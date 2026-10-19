@@ -34,11 +34,13 @@ not an import/export pipeline.
 cvx-cli
    |
 cvx-repository        use cases: init, add, commit, status, log,
-   |                  diff, restore, checkout, branch, switch
+   |                  diff, restore, checkout, branch, switch,
+   |                  merge, tag
    |
-   +-- cvx-revision   revision parsing and commit graph
+   +-- cvx-revision   revision parsing, commit graph and merge base
    +-- cvx-worktree   worktree scan and status
-   +-- cvx-diff       unified diff rendering
+   +-- cvx-diff       unified diff rendering and similarity
+   +-- cvx-merge      three-way content merge and conflict markers
    +-- cvx-index      staging area
    +-- cvx-ref        refs, HEAD, packed-refs, reflogs
    +-- cvx-odb        loose objects + pack access
@@ -101,7 +103,10 @@ Dependency rules:
 The local workflow implemented in this workspace covers:
 
 - `init`, `add`, `commit`, `status`, `log`, `diff`, `restore`, `checkout`,
-  `branch` and `switch`;
+  `branch`, `switch`, `merge` and `tag`;
+- three-way merges, conflict markers, index stages 1/2/3, merge commits with
+  two parents and `merge --abort`/`--continue`;
+- annotated and lightweight tags, `log --decorate` and rename detection;
 - loose object writes and verified reads;
 - version-2 packfiles and indexes, including delta chains;
 - index versions 2 through 4 on input, version-2 writes (or version 3 when
@@ -117,8 +122,7 @@ the system, crate graph, object model and workflows.
 
 ## Non-goals for the current milestone
 
-Network transports, merges and conflict resolution, tags creation, reset,
-revert, cherry-pick, submodules, LFS, reftable, SHA-256 repositories, bare
-repositories, linked worktrees, `.gitattributes`, CRLF normalization, hooks and
-commit signing. These are explicit errors or documented gaps, not silent
-no-ops.
+Network transports, reset, revert, cherry-pick, submodules, LFS, reftable,
+SHA-256 repositories, bare repositories, linked worktrees, `.gitattributes`,
+CRLF normalization, hooks and commit signing. These are explicit errors or
+documented gaps, not silent no-ops.

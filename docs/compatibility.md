@@ -40,12 +40,17 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `cvx checkout -- <paths>` | Implemented | Worktree restore from index |
 | `cvx branch` | Implemented | List/create/delete, merged-branch check |
 | `cvx switch` | Implemented | `-c`, detached HEAD, `--force` |
-| `cvx diff` rename detection | No | Reports delete + add |
-| `cvx status` rename detection | No | Reports delete + add |
+| `cvx merge` | Implemented | Fast-forward, three-way merge, two-parent commits |
+| `cvx merge --abort` / `--continue` | Implemented | `MERGE_HEAD`, `MERGE_MSG` and `ORIG_HEAD` state |
+| Merge conflicts | Implemented | Markers in the worktree and index stages 1/2/3 |
+| Merge rename detection | No | Renames merge as independent delete and add paths |
+| Directory/file merge conflicts | Limited | Rejected explicitly before writing |
+| `cvx tag` | Implemented | Lightweight and annotated tags, list and force |
+| `cvx log --decorate` | Implemented | Local branches and tags, peeled annotated tags |
+| `cvx diff` rename detection | Implemented | Content similarity, 50% threshold |
+| `cvx status` rename detection | Implemented | Staged renames (HEAD to index) |
 | `cvx diff` non-UTF-8 text | Limited | Non-UTF-8 text is rendered lossily |
 | `cvx diff` combined conflict diff | No | Diff with unmerged entries is rejected |
-| Merge and conflict resolution | Not implemented | Planned for Phase 2B |
-| Tags creation | Not implemented | Reading/peeling annotated tags works |
 | `cvx reset` / `revert` / `cherry-pick` | Not implemented | Planned later |
 | `.gitignore` | Implemented | Worktree walks and `add .` |
 | `.git/info/exclude` | Read | Compatibility mode |
@@ -63,6 +68,9 @@ explicit error or is documented as out of scope; it is never silently ignored.
 - `restore`, `checkout` and `switch` refuse to follow symlinked ancestors.
 - Untracked files are not overwritten unless `--force` is given.
 - `switch` refuses tracked local changes unless `--force` is given.
+- `merge` refuses staged, unstaged or unresolved changes and untracked-file
+  collisions before writing anything.
+- `merge --abort` restores `ORIG_HEAD`, the worktree and the index.
 - Directories are never recursively deleted by checkout; a directory in the
   way is an explicit error.
 - Worktree writes use temporary files and atomic replacement where possible.
@@ -78,6 +86,8 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
 | Switch branches in a packed repository | Yes |
+| Merge commits and conflicted index stages | Yes |
+| Annotated and lightweight tags | Yes |
 | Clone / fetch / push | Not implemented |
 | GitHub API and authentication | Not implemented |
 | Shallow and partial clones | Not implemented |

@@ -98,6 +98,26 @@ flowchart TD
     Head --> Done(["switched"])
 ```
 
+## Merge and resolve conflicts
+
+```mermaid
+flowchart TD
+    Start(["cvx merge feature"]) --> InProgress{"MERGE_HEAD exists?"}
+    InProgress -->|yes| Error["error: merge in progress"]
+    InProgress -->|no| Clean{"index and worktree clean?"}
+    Clean -->|no| Refuse["error: commit local changes first"]
+    Clean -->|yes| Base["find merge base"]
+    Base -->|target ancestor| UpToDate["already up to date"]
+    Base -->|HEAD ancestor| FastForward["checkout target<br/>move branch"]
+    Base -->|diverged| Merge["three-way merge paths"]
+    Merge -->|clean| Commit["write two-parent merge commit"]
+    Merge -->|conflicts| Markers["markers in worktree<br/>index stages 1/2/3<br/>MERGE_HEAD + MERGE_MSG"]
+    Markers --> Resolve{"cvx add <paths>"}
+    Resolve --> Continue(["cvx merge --continue<br/>or cvx commit"])
+    Markers --> Abort(["cvx merge --abort"])
+    Abort --> Restore["restore ORIG_HEAD tree and index"]
+```
+
 ## Planned clone/push
 
 ```mermaid

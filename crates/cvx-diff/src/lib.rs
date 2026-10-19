@@ -27,6 +27,10 @@ pub struct DiffSide {
 pub struct DiffFile {
     /// Path shown in the diff.
     pub path: Vec<u8>,
+    /// Original path, set only when the file was renamed.
+    pub old_path: Option<Vec<u8>>,
+    /// Similarity percentage for a rename, clamped to 1..=100.
+    pub similarity: Option<u8>,
     /// Old side, or `None` for added files.
     pub old: Option<DiffSide>,
     /// New side, or `None` for deleted files.
@@ -69,10 +73,31 @@ pub fn is_binary(content: &[u8]) -> bool {
     content.iter().take(8000).any(|byte| *byte == 0)
 }
 
+/// Estimates how similar two files are, in the `0.0..=1.0` range.
+///
+/// Identical files are always 100% similar. Binary files that differ are
+/// treated as unrelated because their contents cannot be compared by line.
+pub fn similarity(old: &[u8], new: &[u8]) -> f32 {
+    if old == new {
+        return 1.0;
+    }
+    if is_binary(old) || is_binary(new) {
+        return 0.0;
+    }
+
+    let old = String::from_utf8_lossy(old);
+    let new = String::from_utf8_lossy(new);
+    TextDiff::from_lines(old.as_ref(), new.as_ref()).ratio()
+}
+
 fn render_file(output: &mut String, file: &DiffFile, context: usize) {
     let path = display_path(&file.path);
+    let old_display = file
+        .old_path
+        .as_ref()
+        .map_or_else(|| path.clone(), |path| display_path(path));
     let old_path = if file.old.is_some() {
-        format!("a/{path}")
+        format!("a/{old_display}")
     } else {
         "/dev/null".to_owned()
     };
@@ -82,7 +107,16 @@ fn render_file(output: &mut String, file: &DiffFile, context: usize) {
         "/dev/null".to_owned()
     };
 
-    let _ = writeln!(output, "diff --git a/{path} b/{path}");
+    let _ = writeln!(output, "diff --git a/{old_display} b/{path}");
+    if file.old_path.is_some() {
+        let _ = writeln!(
+            output,
+            "similarity index {}%",
+            file.similarity.unwrap_or(100)
+        );
+        let _ = writeln!(output, "rename from {old_display}");
+        let _ = writeln!(output, "rename to {path}");
+    }
 
     match (&file.old, &file.new) {
         (None, Some(new)) => {
@@ -144,7 +178,10 @@ fn render_stat(files: &[DiffFile]) -> String {
     let mut deletions = 0usize;
 
     for file in files {
-        let path = display_path(&file.path);
+        let path = match &file.old_path {
+            Some(old_path) => format!("{} => {}", display_path(old_path), display_path(&file.path)),
+            None => display_path(&file.path),
+        };
         let old_content = file.old.as_ref().map_or(&[][..], |side| &side.content);
         let new_content = file.new.as_ref().map_or(&[][..], |side| &side.content);
 
@@ -228,6 +265,8 @@ mod tests {
     fn renders_modified_file() {
         let file = DiffFile {
             path: b"hello.txt".to_vec(),
+            old_path: None,
+            similarity: None,
             old: Some(side(b"hello\n")),
             new: Some(side(b"hello world\n")),
         };
@@ -244,11 +283,15 @@ mod tests {
     fn renders_added_and_deleted_files() {
         let added = DiffFile {
             path: b"new.txt".to_vec(),
+            old_path: None,
+            similarity: None,
             old: None,
             new: Some(side(b"new\n")),
         };
         let deleted = DiffFile {
             path: b"old.txt".to_vec(),
+            old_path: None,
+            similarity: None,
             old: Some(side(b"old\n")),
             new: None,
         };
@@ -264,6 +307,8 @@ mod tests {
     fn reports_mode_changes_without_content() {
         let file = DiffFile {
             path: b"script.sh".to_vec(),
+            old_path: None,
+            similarity: None,
             old: Some(DiffSide {
                 mode: MODE_FILE,
                 oid: oid(2),
@@ -285,6 +330,8 @@ mod tests {
     fn detects_binary_content() {
         let file = DiffFile {
             path: b"image.bin".to_vec(),
+            old_path: None,
+            similarity: None,
             old: Some(side(b"abc\0def")),
             new: Some(side(b"abc\0xyz")),
         };
@@ -296,6 +343,8 @@ mod tests {
     fn renders_stat_summary() {
         let file = DiffFile {
             path: b"file.txt".to_vec(),
+            old_path: None,
+            similarity: None,
             old: Some(side(b"one\ntwo\n")),
             new: Some(side(b"one\nthree\n")),
         };

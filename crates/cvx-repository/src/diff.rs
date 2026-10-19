@@ -200,6 +200,9 @@ impl Repository {
         paths.extend(new.keys().cloned());
 
         let mut files = Vec::new();
+        let mut deleted = Vec::new();
+        let mut added = Vec::new();
+
         for path in paths {
             if !pathspec_matches(&path, pathspecs) {
                 continue;
@@ -207,19 +210,87 @@ impl Repository {
 
             let old_entry = old.get(&path);
             let new_entry = new.get(&path);
-            if let (Some(old), Some(new)) = (old_entry, new_entry) {
-                if old.mode == new.mode && old.oid == new.oid {
-                    continue;
+            match (old_entry, new_entry) {
+                (Some(old), Some(new)) => {
+                    if old.mode == new.mode && old.oid == new.oid {
+                        continue;
+                    }
+                    files.push(DiffFile {
+                        path,
+                        old_path: None,
+                        similarity: None,
+                        old: Some(self.diff_side(old)?),
+                        new: Some(self.diff_side(new)?),
+                    });
+                }
+                (Some(old), None) => deleted.push((path, self.diff_side(old)?)),
+                (None, Some(new)) => added.push((path, self.diff_side(new)?)),
+                (None, None) => unreachable!("path came from one of the snapshots"),
+            }
+        }
+
+        let mut candidates = Vec::new();
+        for (deleted_index, (_, old_side)) in deleted.iter().enumerate() {
+            for (added_index, (_, new_side)) in added.iter().enumerate() {
+                let score = cvx_diff::similarity(&old_side.content, &new_side.content);
+                if score >= 0.5 {
+                    candidates.push((score, deleted_index, added_index));
                 }
             }
+        }
+        candidates.sort_by(|left, right| {
+            right
+                .0
+                .partial_cmp(&left.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| deleted[left.1].0.cmp(&deleted[right.1].0))
+                .then_with(|| added[left.2].0.cmp(&added[right.2].0))
+        });
 
+        let mut deleted_used = vec![false; deleted.len()];
+        let mut added_used = vec![false; added.len()];
+        for (score, deleted_index, added_index) in candidates {
+            if deleted_used[deleted_index] || added_used[added_index] {
+                continue;
+            }
+            deleted_used[deleted_index] = true;
+            added_used[added_index] = true;
+
+            let (old_path, old_side) = &deleted[deleted_index];
+            let (new_path, new_side) = &added[added_index];
             files.push(DiffFile {
-                path: path.clone(),
-                old: old_entry.map(|entry| self.diff_side(entry)).transpose()?,
-                new: new_entry.map(|entry| self.diff_side(entry)).transpose()?,
+                path: new_path.clone(),
+                old_path: Some(old_path.clone()),
+                similarity: Some((score * 100.0).round().clamp(1.0, 100.0) as u8),
+                old: Some(old_side.clone()),
+                new: Some(new_side.clone()),
             });
         }
 
+        for (index, (path, side)) in deleted.into_iter().enumerate() {
+            if !deleted_used[index] {
+                files.push(DiffFile {
+                    path,
+                    old_path: None,
+                    similarity: None,
+                    old: Some(side),
+                    new: None,
+                });
+            }
+        }
+        for (index, (path, side)) in added.into_iter().enumerate() {
+            if !added_used[index] {
+                files.push(DiffFile {
+                    path,
+                    old_path: None,
+                    similarity: None,
+                    old: None,
+                    new: Some(side),
+                });
+            }
+        }
+
+        files.sort_by(|left, right| left.path.cmp(&right.path));
         Ok(files)
     }
 

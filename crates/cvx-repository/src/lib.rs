@@ -14,10 +14,12 @@ mod commit;
 mod diff;
 mod init;
 mod log;
+mod merge;
 mod repository;
 mod restore;
 mod status;
 mod switch;
+mod tag;
 mod worktree_ops;
 
 pub use add::{AddOptions, AddOutcome};
@@ -29,7 +31,11 @@ pub use cvx_revision::LogEntry;
 pub use diff::DiffOptions;
 pub use init::{InitOptions, InitOutcome, InitStorage};
 pub use log::LogOptions;
+pub use merge::{MergeOptions, MergeOutcome};
 pub use repository::{CVX_DIR, GIT_DIR, Repository, RepositoryKind, TreeLeaf};
 pub use restore::{RestoreOptions, RestoreOutcome};
-pub use status::{Status, StatusEntry, StatusKind, StatusOptions, UntrackedEntry};
+pub use status::{
+    ConflictEntry, ConflictKind, Status, StatusEntry, StatusKind, StatusOptions, UntrackedEntry,
+};
 pub use switch::{SwitchOptions, SwitchOutcome};
+pub use tag::{TagOptions, TagOutcome};

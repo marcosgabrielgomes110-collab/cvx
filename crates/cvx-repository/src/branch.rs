@@ -76,7 +76,7 @@ impl Repository {
                     "cannot delete branch '{name}': HEAD has no commits"
                 )));
             };
-            if !self.is_ancestor(oid, head)? {
+            if !cvx_revision::is_ancestor(oid, head, |oid| self.read_commit(oid))? {
                 return Err(Error::Message(format!(
                     "branch '{name}' is not fully merged; use -D to force deletion"
                 )));
@@ -84,14 +84,5 @@ impl Repository {
         }
 
         self.refs().delete_ref(&reference, Some(oid))
-    }
-
-    fn is_ancestor(&self, ancestor: ObjectId, descendant: ObjectId) -> Result<bool> {
-        if ancestor == descendant {
-            return Ok(true);
-        }
-
-        let history = cvx_revision::walk_commits(descendant, None, |oid| self.read_commit(oid))?;
-        Ok(history.iter().any(|entry| entry.oid == ancestor))
     }
 }

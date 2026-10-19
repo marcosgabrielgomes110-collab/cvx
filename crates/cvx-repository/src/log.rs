@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use cvx_core::{Error, Result};
 use cvx_object::{ObjectId, ObjectKind};
 use cvx_revision::{LogEntry, walk_commits};
@@ -18,6 +20,50 @@ impl Repository {
     pub fn log(&self, options: &LogOptions) -> Result<Vec<LogEntry>> {
         let start = self.resolve_revision(options.revision.as_deref().unwrap_or("HEAD"))?;
         walk_commits(start, options.limit, |oid| self.read_commit(oid))
+    }
+
+    /// Returns branch and tag names keyed by the commit they decorate.
+    ///
+    /// Annotated tags are peeled to their target commit. The current branch is
+    /// labeled `HEAD -> <branch>`; unrelated branches and tags use their short
+    /// names.
+    pub fn decorations(&self) -> Result<BTreeMap<ObjectId, Vec<String>>> {
+        let mut decorations: BTreeMap<ObjectId, Vec<String>> = BTreeMap::new();
+        let current_branch = self.branch_name()?;
+
+        for (reference, oid) in self.refs().list_refs("refs/heads")? {
+            if let Some(name) = reference.strip_prefix("refs/heads/") {
+                let label = if current_branch.as_deref() == Some(name) {
+                    format!("HEAD -> {name}")
+                } else {
+                    name.to_owned()
+                };
+                decorations.entry(oid).or_default().push(label);
+            }
+        }
+
+        for (reference, oid) in self.refs().list_refs("refs/tags")? {
+            if let Some(name) = reference.strip_prefix("refs/tags/")
+                && let Ok(commit) = self.peel_to_commit(oid)
+            {
+                decorations
+                    .entry(commit)
+                    .or_default()
+                    .push(format!("tag: {name}"));
+            }
+        }
+
+        if current_branch.is_none()
+            && let Some(oid) = self.head()?.oid()
+        {
+            decorations.entry(oid).or_default().push("HEAD".to_owned());
+        }
+
+        for labels in decorations.values_mut() {
+            labels.sort();
+            labels.dedup();
+        }
+        Ok(decorations)
     }
 
     /// Resolves `HEAD`, a full or abbreviated object id, a branch or a tag.
@@ -61,7 +107,7 @@ impl Repository {
         Err(Error::Message(format!("unknown revision: {revision}")))
     }
 
-    fn peel_to_commit(&self, oid: ObjectId) -> Result<ObjectId> {
+    pub(crate) fn peel_to_commit(&self, oid: ObjectId) -> Result<ObjectId> {
         let mut current = oid;
         for _ in 0..8 {
             let object = self.read_object(current)?;

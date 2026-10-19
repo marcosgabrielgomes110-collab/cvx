@@ -37,11 +37,16 @@ pub struct SwitchOutcome {
     pub detached: bool,
 }
 
-type TreeSnapshot = BTreeMap<Vec<u8>, (u32, ObjectId)>;
+pub(crate) type TreeSnapshot = BTreeMap<Vec<u8>, (u32, ObjectId)>;
 
 impl Repository {
     /// Switches branches or detaches HEAD.
     pub fn switch(&self, options: &SwitchOptions) -> Result<SwitchOutcome> {
+        if self.merge_head()?.is_some() {
+            return Err(Error::Message(
+                "cannot switch branches while a merge is in progress".to_owned(),
+            ));
+        }
         let current_head = self.head()?;
         let current_oid = current_head.oid();
         let current_branch = current_head
@@ -143,15 +148,7 @@ impl Repository {
             return Err(error);
         }
 
-        let mut new_index = Index::new();
-        for (path, (mode, oid)) in &target_tree {
-            let absolute = self.work_tree().join(cvx_index::path_from_bytes(path)?);
-            let metadata = std::fs::symlink_metadata(&absolute)
-                .map_err(|error| Error::io(absolute.display().to_string(), error))?;
-            let mut entry = IndexEntry::from_metadata(path.clone(), *oid, &metadata, filemode)?;
-            entry.mode = *mode;
-            new_index.insert(entry)?;
-        }
+        let new_index = self.index_from_tree(&target_tree, filemode)?;
         lock.commit(&new_index)?;
 
         let head_label = current_branch.clone().unwrap_or_else(|| match current_oid {
@@ -191,7 +188,20 @@ impl Repository {
         })
     }
 
-    fn checkout_target(
+    pub(crate) fn index_from_tree(&self, tree: &TreeSnapshot, filemode: bool) -> Result<Index> {
+        let mut new_index = Index::new();
+        for (path, (mode, oid)) in tree {
+            let absolute = self.work_tree().join(cvx_index::path_from_bytes(path)?);
+            let metadata = std::fs::symlink_metadata(&absolute)
+                .map_err(|error| Error::io(absolute.display().to_string(), error))?;
+            let mut entry = IndexEntry::from_metadata(path.clone(), *oid, &metadata, filemode)?;
+            entry.mode = *mode;
+            new_index.insert(entry)?;
+        }
+        Ok(new_index)
+    }
+
+    pub(crate) fn checkout_target(
         &self,
         target: &TreeSnapshot,
         index: &BTreeMap<Vec<u8>, (u32, ObjectId)>,
