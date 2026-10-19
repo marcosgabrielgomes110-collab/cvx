@@ -36,7 +36,7 @@ pub struct CommitOutcome {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum IdentityRole {
+pub(crate) enum IdentityRole {
     Author,
     Committer,
 }
@@ -162,7 +162,7 @@ impl Repository {
         self.objects().write(ObjectKind::Tree, &tree.serialize())
     }
 
-    fn resolve_signature(&self, role: IdentityRole) -> Result<Signature> {
+    pub(crate) fn resolve_signature(&self, role: IdentityRole) -> Result<Signature> {
         let role_name = role.upper();
         let name = match env_value(&format!("CVX_{role_name}_NAME"))
             .or_else(|| env_value(&format!("GIT_{role_name}_NAME")))
@@ -245,7 +245,7 @@ impl Repository {
         }
     }
 
-    fn reflog_enabled(&self) -> Result<bool> {
+    pub(crate) fn reflog_enabled(&self) -> Result<bool> {
         if let Some(value) = self.config_value("core.logallrefupdates")? {
             if value.eq_ignore_ascii_case("always") {
                 return Ok(true);
@@ -255,7 +255,7 @@ impl Repository {
         Ok(true)
     }
 
-    fn append_reflog(
+    pub(crate) fn append_reflog(
         &self,
         name: &str,
         old: Option<ObjectId>,

@@ -488,6 +488,273 @@ fn works_with_packed_refs() {
 }
 
 #[test]
+fn diff_matches_git_for_worktree_and_index() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("a.txt", "one\ntwo\nthree\n");
+    env.write("b.txt", "keep\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "initial"])
+        .assert()
+        .success();
+
+    env.write("a.txt", "one\nCHANGED\nthree\n");
+    env.write("new.txt", "new\n");
+    env.cvx().args(["add", "new.txt"]).assert().success();
+    env.remove("b.txt");
+
+    let cvx_diff = env.cvx().args(["diff"]).output().expect("cvx diff");
+    let git_diff = env.git_cvx(&["diff", "--no-ext-diff", "--no-color"]);
+    assert_eq!(normalize(&cvx_diff), normalize(&git_diff));
+
+    let cvx_cached = env
+        .cvx()
+        .args(["diff", "--cached"])
+        .output()
+        .expect("cvx diff --cached");
+    let git_cached = env.git_cvx(&["diff", "--cached", "--no-ext-diff", "--no-color"]);
+    assert_eq!(normalize(&cvx_cached), normalize(&git_cached));
+
+    let stat = env
+        .cvx()
+        .args(["diff", "--stat"])
+        .output()
+        .expect("cvx diff --stat");
+    assert!(stdout(&stat).contains("a.txt"));
+    assert!(stdout(&stat).contains("files changed"));
+}
+
+#[test]
+fn restore_and_checkout_paths() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "one\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "initial"])
+        .assert()
+        .success();
+
+    env.write("file.txt", "changed\n");
+    env.cvx().args(["restore", "file.txt"]).assert().success();
+    assert_eq!(env.read("file.txt"), "one\n");
+    assert_eq!(
+        normalize(&env.cvx().args(["status", "--porcelain"]).output().unwrap()),
+        ""
+    );
+
+    env.write("file.txt", "staged\n");
+    env.cvx().args(["add", "file.txt"]).assert().success();
+    env.cvx()
+        .args(["restore", "--staged", "file.txt"])
+        .assert()
+        .success();
+    let status = env
+        .cvx()
+        .args(["status", "--porcelain"])
+        .output()
+        .expect("status");
+    assert!(stdout(&status).contains(" M file.txt"));
+
+    env.cvx()
+        .args(["checkout", "--", "file.txt"])
+        .assert()
+        .success();
+    assert_eq!(env.read("file.txt"), "one\n");
+    assert_eq!(
+        normalize(&env.cvx().args(["status", "--porcelain"]).output().unwrap()),
+        ""
+    );
+
+    env.remove("file.txt");
+    env.cvx()
+        .args([
+            "restore",
+            "--source",
+            "HEAD",
+            "--staged",
+            "--worktree",
+            "file.txt",
+        ])
+        .assert()
+        .success();
+    assert_eq!(env.read("file.txt"), "one\n");
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}
+
+#[test]
+fn restore_refuses_to_overwrite_untracked_file() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "one\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "initial"])
+        .assert()
+        .success();
+
+    env.remove("file.txt");
+    env.cvx().args(["add", "-A"]).assert().success();
+    env.write("file.txt", "untracked\n");
+
+    env.cvx()
+        .args(["restore", "--source", "HEAD", "--worktree", "file.txt"])
+        .assert()
+        .failure()
+        .code(128)
+        .stderr(predicate::str::contains("untracked file"));
+
+    env.cvx()
+        .args([
+            "restore",
+            "--source",
+            "HEAD",
+            "--worktree",
+            "--force",
+            "file.txt",
+        ])
+        .assert()
+        .success();
+    assert_eq!(env.read("file.txt"), "one\n");
+}
+
+#[test]
+fn branch_and_switch_workflow() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "main\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "main"]).assert().success();
+
+    env.cvx().args(["branch", "feature"]).assert().success();
+    let list = env.cvx().args(["branch"]).output().expect("branch list");
+    let list = stdout(&list);
+    assert!(list.contains("* main"));
+    assert!(list.contains("feature"));
+
+    env.cvx()
+        .args(["switch", "feature"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Switched to branch 'feature'"));
+    assert!(stdout(&env.cvx().args(["branch"]).output().unwrap()).contains("* feature"));
+
+    env.write("file.txt", "feature\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "feature"])
+        .assert()
+        .success();
+
+    env.cvx().args(["switch", "main"]).assert().success();
+    assert_eq!(env.read("file.txt"), "main\n");
+
+    env.cvx()
+        .args(["branch", "-d", "feature"])
+        .assert()
+        .failure()
+        .code(128)
+        .stderr(predicate::str::contains("not fully merged"));
+    env.cvx()
+        .args(["branch", "-D", "feature"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Deleted branch feature"));
+    assert!(!stdout(&env.cvx().args(["branch"]).output().unwrap()).contains("feature"));
+
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}
+
+#[test]
+fn switch_creates_branches_and_detaches_head() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "content\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "initial"])
+        .assert()
+        .success();
+
+    env.cvx()
+        .args(["switch", "-c", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Switched to a new branch 'work'"));
+    assert!(stdout(&env.cvx().args(["branch"]).output().unwrap()).contains("* work"));
+
+    env.cvx()
+        .args(["branch", "-d", "work"])
+        .assert()
+        .failure()
+        .code(128)
+        .stderr(predicate::str::contains("currently checked out"));
+
+    env.cvx()
+        .args(["switch", "--detach", "HEAD"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("HEAD is now at"));
+    let status = env.cvx().args(["status"]).output().expect("status");
+    assert!(stdout(&status).contains("HEAD detached"));
+
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}
+
+#[test]
+fn switch_refuses_dirty_worktree_and_untracked_collisions() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "main\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "main"]).assert().success();
+
+    env.cvx().args(["switch", "-c", "other"]).assert().success();
+    env.write("file.txt", "other\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "other"]).assert().success();
+    env.cvx().args(["switch", "main"]).assert().success();
+
+    env.write("file.txt", "dirty\n");
+    env.cvx()
+        .args(["switch", "other"])
+        .assert()
+        .failure()
+        .code(128)
+        .stderr(predicate::str::contains("local changes"));
+    env.cvx()
+        .args(["switch", "--force", "other"])
+        .assert()
+        .success();
+    assert_eq!(env.read("file.txt"), "other\n");
+
+    env.cvx().args(["switch", "main"]).assert().success();
+    env.cvx()
+        .args(["switch", "-c", "collision"])
+        .assert()
+        .success();
+    env.write("collision.txt", "tracked\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "collision"])
+        .assert()
+        .success();
+    env.cvx().args(["switch", "main"]).assert().success();
+
+    env.write("collision.txt", "untracked\n");
+    env.cvx()
+        .args(["switch", "collision"])
+        .assert()
+        .failure()
+        .code(128)
+        .stderr(predicate::str::contains("untracked file"));
+    env.remove("collision.txt");
+    env.cvx().args(["switch", "collision"]).assert().success();
+    assert_eq!(env.read("collision.txt"), "tracked\n");
+}
+
+#[test]
 fn log_limit_returns_the_newest_commit() {
     let env = TestEnv::new();
     env.cvx().args(["init"]).assert().success();
@@ -521,6 +788,11 @@ fn help_lists_only_implemented_commands() {
     assert!(text.contains("commit"));
     assert!(text.contains("status"));
     assert!(text.contains("log"));
+    assert!(text.contains("diff"));
+    assert!(text.contains("restore"));
+    assert!(text.contains("checkout"));
+    assert!(text.contains("branch"));
+    assert!(text.contains("switch"));
     assert!(!text.contains("clone"));
     assert!(!text.contains("push"));
 }

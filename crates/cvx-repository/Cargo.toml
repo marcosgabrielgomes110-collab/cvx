@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 cvx-config = { workspace = true }
 cvx-core = { workspace = true }
+cvx-diff = { workspace = true }
 cvx-ignore = { workspace = true }
 cvx-index = { workspace = true }
 cvx-object = { workspace = true }

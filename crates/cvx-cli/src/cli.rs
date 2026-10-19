@@ -37,6 +37,21 @@ pub enum Command {
     /// Show commit history.
     Log(LogArgs),
 
+    /// Show changes between commits, the index and the worktree.
+    Diff(DiffArgs),
+
+    /// Restore index entries or worktree files.
+    Restore(RestoreArgs),
+
+    /// Restore worktree files from the index.
+    Checkout(CheckoutArgs),
+
+    /// List, create or delete branches.
+    Branch(BranchArgs),
+
+    /// Switch branches or detach HEAD.
+    Switch(SwitchArgs),
+
     /// Print version and format information.
     Version,
 }
@@ -136,6 +151,106 @@ pub struct LogArgs {
     /// One line per commit.
     #[arg(long)]
     pub oneline: bool,
+}
+
+/// Arguments for `cvx diff`.
+#[derive(Debug, clap::Args)]
+pub struct DiffArgs {
+    /// Compare HEAD with the index.
+    #[arg(long)]
+    pub cached: bool,
+
+    /// Show a diffstat instead of hunks.
+    #[arg(long)]
+    pub stat: bool,
+
+    /// Number of context lines.
+    #[arg(short = 'U', long = "unified", default_value_t = 3, value_name = "N")]
+    pub context: usize,
+
+    /// Zero, one or two revisions.
+    #[arg(value_name = "REV")]
+    pub revisions: Vec<String>,
+
+    /// Optional pathspecs after `--`.
+    #[arg(last = true, value_name = "PATH")]
+    pub paths: Vec<PathBuf>,
+}
+
+/// Arguments for `cvx restore`.
+#[derive(Debug, clap::Args)]
+pub struct RestoreArgs {
+    /// Restore index entries.
+    #[arg(short = 'S', long)]
+    pub staged: bool,
+
+    /// Restore worktree files (the default).
+    #[arg(short = 'W', long)]
+    pub worktree: bool,
+
+    /// Source revision.
+    #[arg(short = 's', long, value_name = "REV")]
+    pub source: Option<String>,
+
+    /// Overwrite untracked files.
+    #[arg(short = 'f', long)]
+    pub force: bool,
+
+    /// Files or directories to restore.
+    #[arg(value_name = "PATH", required = true)]
+    pub paths: Vec<PathBuf>,
+}
+
+/// Arguments for `cvx checkout -- <paths>`.
+#[derive(Debug, clap::Args)]
+pub struct CheckoutArgs {
+    /// Files or directories to restore from the index.
+    #[arg(last = true, value_name = "PATH", required = true)]
+    pub paths: Vec<PathBuf>,
+}
+
+/// Arguments for `cvx branch`.
+#[derive(Debug, clap::Args)]
+pub struct BranchArgs {
+    /// Delete a fully merged branch.
+    #[arg(short = 'd', long, conflicts_with = "force_delete")]
+    pub delete: bool,
+
+    /// Delete a branch even if it is not merged.
+    #[arg(short = 'D', conflicts_with = "delete")]
+    pub force_delete: bool,
+
+    /// List branches.
+    #[arg(short = 'l', long)]
+    pub list: bool,
+
+    /// Branch name.
+    #[arg(value_name = "BRANCH")]
+    pub name: Option<String>,
+
+    /// Starting point for a new branch.
+    #[arg(value_name = "START")]
+    pub start_point: Option<String>,
+}
+
+/// Arguments for `cvx switch`.
+#[derive(Debug, clap::Args)]
+pub struct SwitchArgs {
+    /// Create and switch to a new branch.
+    #[arg(short = 'c', long, conflicts_with = "detach")]
+    pub create: bool,
+
+    /// Detach HEAD at the target revision.
+    #[arg(long, conflicts_with = "create")]
+    pub detach: bool,
+
+    /// Discard local changes instead of refusing to switch.
+    #[arg(short = 'f', long)]
+    pub force: bool,
+
+    /// Branch name or revision.
+    #[arg(value_name = "BRANCH")]
+    pub target: Option<String>,
 }
 
 /// Storage conventions exposed on the command line.

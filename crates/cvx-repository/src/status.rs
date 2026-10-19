@@ -173,9 +173,14 @@ impl Repository {
                     unstaged.insert(path.clone(), StatusKind::TypeChanged);
                 }
                 WorktreeContent::File { mode, oid } => {
+                    let mode_changed = if filemode {
+                        mode != entry.mode
+                    } else {
+                        mode_bits(mode) != mode_bits(entry.mode)
+                    };
                     if mode_bits(mode) != mode_bits(entry.mode) {
                         unstaged.insert(path.clone(), StatusKind::TypeChanged);
-                    } else if mode != entry.mode || oid != entry.oid {
+                    } else if mode_changed || oid != entry.oid {
                         unstaged.insert(path.clone(), StatusKind::Modified);
                     }
                 }

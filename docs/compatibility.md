@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-The local core is deliberately narrow. A feature marked **No** produces an
+CVX prioritizes Git interoperability. A feature marked **No** produces an
 explicit error or is documented as out of scope; it is never silently ignored.
 
 ## Repository format
@@ -15,43 +15,58 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Delta chains (`ofs-delta`, `ref-delta`) | Yes | No | Depth and output size are bounded |
 | Multi-pack index (MIDX) | No | No | Individual `.idx` files are used |
 | `objects/info/alternates` | No | No | Rejected as unsupported |
-| `packed-refs` | Yes | No | Loose refs take precedence; `git pack-refs` works |
+| `packed-refs` | Yes | Yes | Loose refs take precedence; refs can be deleted from packed-refs |
 | Index v2 | Yes | Yes | Default write format |
 | Index v3/v4 | Yes | No | Read path; writes v2, or v3 when extended flags require it |
-| Reflogs | Yes | Yes | Written for commits; `core.logAllRefUpdates` honored |
+| Reflogs | Yes | Yes | Commits and branch switches |
 | SHA-256 repositories | No | No | Detected and rejected |
 | Reftable storage | No | No | Detected and rejected |
 | Bare repositories | No | No | Rejected during discovery |
 | Linked worktrees | No | No | Rejected during discovery |
-| Submodules | No | No | Nested repositories are out of scope |
+| Submodules | No | No | Checkout and diff reject gitlinks |
 | Git LFS | No | No | Pointer files are treated as ordinary blobs |
 
 ## Local operations
 
-| Operation | Status |
-| --- | --- |
-| `cvx init` | Implemented |
-| `cvx add` | Implemented |
-| `cvx commit` | Implemented |
-| `cvx status` | Implemented |
-| `cvx log` | Implemented |
-| `cvx version` | Implemented |
-| `cvx diff` | Not implemented |
-| `cvx checkout` / `switch` | Not implemented |
-| `cvx branch` / `merge` | Not implemented |
-| Tags creation | Not implemented |
-| Annotated tag reading/peeling | Implemented |
-| Rename detection in `status` | Not implemented; reports delete + add |
-| `.gitignore` | Implemented for worktree walks and `add .` |
-| `.git/info/exclude` | Read in compatibility mode |
-| `.cvx/info/exclude` custom patterns | Not read; the control directory is skipped explicitly |
-| Explicitly added ignored files | Added; Git would require `-f` |
-| `.gitattributes` | Not implemented |
-| CRLF / `core.autocrlf` normalization | Not implemented; `cvx add` rejects enabled autocrlf |
-| Nested repositories / submodules | `cvx add` rejects them explicitly |
-| Non-UTF-8 paths | Supported on Unix; rejected on Windows |
-| Hooks execution | Not implemented |
-| Commit signing | Not implemented |
+| Operation | Status | Notes |
+| --- | --- | --- |
+| `cvx init` | Implemented | `.cvx` or `--storage git` |
+| `cvx add` | Implemented | Pathspecs, ignore rules, modes, symlinks |
+| `cvx commit` | Implemented | Identities, reflogs, atomic refs |
+| `cvx status` | Implemented | Porcelain/short/human output |
+| `cvx log` | Implemented | Oneline, limits, annotated-tag peeling |
+| `cvx diff` | Implemented | Worktree/index, `--cached`, revisions, pathspecs, `--stat` |
+| `cvx restore` | Implemented | Staged/worktree, `--source`, untracked protection |
+| `cvx checkout -- <paths>` | Implemented | Worktree restore from index |
+| `cvx branch` | Implemented | List/create/delete, merged-branch check |
+| `cvx switch` | Implemented | `-c`, detached HEAD, `--force` |
+| `cvx diff` rename detection | No | Reports delete + add |
+| `cvx status` rename detection | No | Reports delete + add |
+| `cvx diff` non-UTF-8 text | Limited | Non-UTF-8 text is rendered lossily |
+| `cvx diff` combined conflict diff | No | Diff with unmerged entries is rejected |
+| Merge and conflict resolution | Not implemented | Planned for Phase 2B |
+| Tags creation | Not implemented | Reading/peeling annotated tags works |
+| `cvx reset` / `revert` / `cherry-pick` | Not implemented | Planned later |
+| `.gitignore` | Implemented | Worktree walks and `add .` |
+| `.git/info/exclude` | Read | Compatibility mode |
+| `.cvx/info/exclude` custom patterns | Not read | Control directory is skipped explicitly |
+| Explicitly added ignored files | Added | Git would require `-f` |
+| `.gitattributes` | Not implemented | |
+| CRLF / `core.autocrlf` normalization | Not implemented | `cvx add` rejects enabled autocrlf |
+| Nested repositories / submodules | Rejected by `add` | |
+| Non-UTF-8 paths | Supported on Unix | Rejected on Windows |
+| Hooks execution | Not implemented | |
+| Commit signing | Not implemented | |
+
+## Worktree safety
+
+- `restore`, `checkout` and `switch` refuse to follow symlinked ancestors.
+- Untracked files are not overwritten unless `--force` is given.
+- `switch` refuses tracked local changes unless `--force` is given.
+- Directories are never recursively deleted by checkout; a directory in the
+  way is an explicit error.
+- Worktree writes use temporary files and atomic replacement where possible.
+- Index updates use `index.lock`; ref updates use compare-and-swap locks.
 
 ## Interoperability
 
@@ -62,6 +77,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `git fsck` on CVX repository | Yes |
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
+| Switch branches in a packed repository | Yes |
 | Clone / fetch / push | Not implemented |
 | GitHub API and authentication | Not implemented |
 | Shallow and partial clones | Not implemented |
@@ -72,4 +88,4 @@ explicit error or is documented as out of scope; it is never silently ignored.
 The official `git` binary is used only by tests and CI. It is not invoked by
 the CVX binary. Differential tests create repositories with both tools, operate
 with one and validate with the other, including packed repositories created by
-`git gc`, version-4 indexes, detached heads and packed refs.
+`git gc`, version-4 indexes, detached heads, packed refs and branch switching.

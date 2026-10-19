@@ -37,6 +37,11 @@ fn run(cli: Cli) -> Result<()> {
         Command::Commit(args) => commands::commit::run(args),
         Command::Status(args) => commands::status::run(args),
         Command::Log(args) => commands::log::run(args),
+        Command::Diff(args) => commands::diff::run(args),
+        Command::Restore(args) => commands::restore::run(args),
+        Command::Checkout(args) => commands::checkout::run(args),
+        Command::Branch(args) => commands::branch::run(args),
+        Command::Switch(args) => commands::switch::run(args),
         Command::Version => {
             commands::version::run();
             Ok(())

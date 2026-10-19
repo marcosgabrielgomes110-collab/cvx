@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
@@ -99,6 +100,194 @@ impl RefStore {
             format!("{oid}\n").as_bytes(),
             Some(0o644),
         )
+    }
+
+    /// Lists references under a prefix such as `refs/heads`.
+    pub fn list_refs(&self, prefix: &str) -> Result<BTreeMap<String, ObjectId>> {
+        let prefix = prefix.trim_end_matches('/');
+        if !cvx_core::refname::is_valid_ref_name(&format!("{prefix}/placeholder")) {
+            return Err(Error::invalid_ref(prefix));
+        }
+
+        let mut refs = BTreeMap::new();
+        for (name, oid) in read_packed_refs(&self.git_dir)? {
+            if name.starts_with(&format!("{prefix}/")) {
+                refs.insert(name, oid);
+            }
+        }
+
+        let directory = self.git_dir.join(prefix);
+        self.collect_loose_refs(&directory, &mut refs, 0)?;
+        Ok(refs)
+    }
+
+    fn collect_loose_refs(
+        &self,
+        directory: &Path,
+        refs: &mut BTreeMap<String, ObjectId>,
+        depth: usize,
+    ) -> Result<()> {
+        if depth > 16 {
+            return Err(Error::corrupt("reference directory is too deep"));
+        }
+
+        let entries = match std::fs::read_dir(directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(Error::io(directory.display().to_string(), error)),
+        };
+
+        for entry in entries {
+            let entry = entry.map_err(|error| Error::io(directory.display().to_string(), error))?;
+            let path = entry.path();
+            let metadata = entry
+                .metadata()
+                .map_err(|error| Error::io(path.display().to_string(), error))?;
+
+            if metadata.is_dir() {
+                self.collect_loose_refs(&path, refs, depth + 1)?;
+                continue;
+            }
+
+            let relative = path
+                .strip_prefix(&self.git_dir)
+                .map_err(|_| Error::corrupt("reference path escaped the repository"))?;
+            let name = relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
+            if name.ends_with(".lock") {
+                continue;
+            }
+            cvx_core::refname::validate_ref_name(&name)?;
+            if let Some(oid) = self.read_ref(&name)? {
+                refs.insert(name, oid);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Deletes a reference using compare-and-swap semantics.
+    pub fn delete_ref(&self, name: &str, expected_old: Option<ObjectId>) -> Result<()> {
+        cvx_core::refname::validate_ref_name(name)?;
+        let lock_path = self.git_dir.join(format!("{name}.lock"));
+        if let Some(parent) = lock_path.parent() {
+            cvx_core::fs::ensure_dir(parent)?;
+        }
+
+        let lock = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    Error::Message(format!(
+                        "unable to create '{}': another process may be updating this reference",
+                        lock_path.display()
+                    ))
+                } else {
+                    Error::io(lock_path.display().to_string(), error)
+                }
+            })?;
+
+        let current = match self.read_ref(name) {
+            Ok(current) => current,
+            Err(error) => {
+                let _ = std::fs::remove_file(&lock_path);
+                return Err(error);
+            }
+        };
+        if current != expected_old {
+            let _ = std::fs::remove_file(&lock_path);
+            return Err(Error::Message(format!(
+                "failed to delete '{name}': reference changed concurrently"
+            )));
+        }
+        if current.is_none() {
+            let _ = std::fs::remove_file(&lock_path);
+            return Err(Error::Message(format!("reference '{name}' does not exist")));
+        }
+
+        let result = (|| -> Result<()> {
+            self.remove_packed_ref(name)?;
+            let loose = self.git_dir.join(name);
+            match std::fs::remove_file(&loose) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(Error::io(loose.display().to_string(), error)),
+            }
+            let reflog = self.git_dir.join("logs").join(name);
+            let _ = std::fs::remove_file(reflog);
+            cvx_core::fs::sync_parent(&loose)
+        })();
+
+        drop(lock);
+        let _ = std::fs::remove_file(&lock_path);
+        result
+    }
+
+    fn remove_packed_ref(&self, name: &str) -> Result<()> {
+        let path = self.git_dir.join("packed-refs");
+        if !path.exists() {
+            return Ok(());
+        }
+
+        let contents = cvx_core::fs::read_to_string(&path)?;
+        let lock_path = self.git_dir.join("packed-refs.lock");
+        let mut lock = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    Error::Message(format!(
+                        "unable to create '{}': another process may be packing references",
+                        lock_path.display()
+                    ))
+                } else {
+                    Error::io(lock_path.display().to_string(), error)
+                }
+            })?;
+
+        let mut output = String::new();
+        let mut changed = false;
+        let mut skip_peeled = false;
+        for line in contents.lines() {
+            if skip_peeled && line.starts_with('^') {
+                skip_peeled = false;
+                continue;
+            }
+            skip_peeled = false;
+
+            let mut fields = line.split_whitespace();
+            let is_deleted =
+                fields.next().is_some() && fields.next().is_some_and(|field| field == name);
+            if is_deleted {
+                changed = true;
+                skip_peeled = true;
+                continue;
+            }
+            output.push_str(line);
+            output.push('\n');
+        }
+
+        if !changed {
+            drop(lock);
+            let _ = std::fs::remove_file(&lock_path);
+            return Ok(());
+        }
+
+        use std::io::Write;
+        lock.write_all(output.as_bytes())
+            .map_err(|error| Error::io(lock_path.display().to_string(), error))?;
+        lock.sync_all()
+            .map_err(|error| Error::io(lock_path.display().to_string(), error))?;
+        drop(lock);
+        std::fs::rename(&lock_path, &path)
+            .map_err(|error| Error::io(path.display().to_string(), error))?;
+        cvx_core::fs::sync_parent(&path)
     }
 
     /// Updates a reference with compare-and-swap semantics.
@@ -286,9 +475,53 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_head() {
+    fn lists_loose_and_packed_refs() {
         let (_temp, store) = store();
-        std::fs::write(store.git_dir().join("HEAD"), "not a reference\n").expect("write");
-        assert!(store.read_head().is_err());
+        let main = ObjectId::from_hex("5555555555555555555555555555555555555555").unwrap();
+        let old = ObjectId::from_hex("6666666666666666666666666666666666666666").unwrap();
+        store.write_ref("refs/heads/main", main).expect("write ref");
+        std::fs::write(
+            store.git_dir().join("packed-refs"),
+            format!("{old} refs/heads/old\n"),
+        )
+        .expect("write packed refs");
+
+        let refs = store.list_refs("refs/heads").expect("list");
+        assert_eq!(refs.get("refs/heads/main"), Some(&main));
+        assert_eq!(refs.get("refs/heads/old"), Some(&old));
+    }
+
+    #[test]
+    fn deletes_loose_and_packed_refs() {
+        let (_temp, store) = store();
+        let main = ObjectId::from_hex("7777777777777777777777777777777777777777").unwrap();
+        let other = ObjectId::from_hex("8888888888888888888888888888888888888888").unwrap();
+        store.write_ref("refs/heads/main", main).expect("write ref");
+        std::fs::write(
+            store.git_dir().join("packed-refs"),
+            format!(
+                "# pack-refs with: peeled fully-peeled sorted\n{other} refs/heads/other\n{main} refs/heads/main\n^9999999999999999999999999999999999999999\n"
+            ),
+        )
+        .expect("write packed refs");
+        std::fs::create_dir_all(store.git_dir().join("logs/refs/heads")).expect("mkdir");
+        std::fs::write(store.git_dir().join("logs/refs/heads/main"), "reflog\n")
+            .expect("write reflog");
+
+        store
+            .delete_ref("refs/heads/main", Some(main))
+            .expect("delete");
+        assert_eq!(store.read_ref("refs/heads/main").expect("read"), None);
+        assert_eq!(
+            store.read_ref("refs/heads/other").expect("read"),
+            Some(other)
+        );
+        assert!(!store.git_dir().join("logs/refs/heads/main").exists());
+
+        let packed =
+            std::fs::read_to_string(store.git_dir().join("packed-refs")).expect("packed refs");
+        assert!(!packed.contains("refs/heads/main"));
+        assert!(packed.contains("refs/heads/other"));
+        assert!(!packed.contains("9999999999999999999999999999999999999999"));
     }
 }
