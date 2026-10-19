@@ -16,7 +16,9 @@ use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
-use cvx_core::{Error, IoResultExt, Result};
+#[cfg(unix)]
+use cvx_core::IoResultExt;
+use cvx_core::{Error, Result};
 
 const KEYCHAIN_SERVICE: &str = "cvx";
 const DEFAULT_USERNAME: &str = "x-access-token";
