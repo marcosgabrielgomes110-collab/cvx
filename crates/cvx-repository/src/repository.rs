@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -10,6 +10,7 @@ use cvx_index::Index;
 use cvx_object::{Commit, HashAlgorithm, ObjectId, ObjectKind, Tree};
 use cvx_odb::{ObjectStore, StoredObject};
 use cvx_ref::{Head, RefStore};
+use cvx_transport::NetworkTransport;
 
 /// Name of the CVX control directory.
 pub const CVX_DIR: &str = ".cvx";
@@ -215,8 +216,34 @@ impl Repository {
     }
 
     /// Reads and verifies an object.
+    ///
+    /// In a partial clone, missing objects are fetched from the promisor
+    /// remote and stored before being returned.
     pub fn read_object(&self, oid: ObjectId) -> Result<StoredObject> {
-        self.objects().read(oid)
+        match self.objects().read(oid) {
+            Ok(object) => Ok(object),
+            Err(Error::ObjectNotFound { .. }) => {
+                let Some(url) = self.partial_clone_url()? else {
+                    return Err(Error::object_not_found(oid.to_string()));
+                };
+                let transport = NetworkTransport::open(&url)?;
+                let response = transport.fetch_full(&[oid], None, &[], Some("blob:none"))?;
+                for object in cvx_pack::ingest_pack(&response.pack)? {
+                    self.objects().write(object.kind, &object.data)?;
+                }
+                self.objects().read(oid)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Returns the promisor remote URL for a partial clone.
+    pub fn partial_clone_url(&self) -> Result<Option<String>> {
+        let config = self.config()?;
+        let Some(remote) = config.get("cvx.partialclone") else {
+            return Ok(None);
+        };
+        self.remote_url(remote)
     }
 
     /// Reads and parses a commit object.
@@ -322,6 +349,53 @@ impl Repository {
         Ok(self.config_bool("core.filemode")?.unwrap_or(cfg!(unix)))
     }
 
+    /// Returns the shallow boundaries recorded in the repository.
+    pub fn shallow_commits(&self) -> Result<BTreeSet<ObjectId>> {
+        let path = self.control_dir().join("shallow");
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(BTreeSet::new());
+            }
+            Err(error) => return Err(Error::io(path.display().to_string(), error)),
+        };
+        let mut boundaries = BTreeSet::new();
+        for line in contents.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            boundaries.insert(
+                ObjectId::from_hex(line.trim()).map_err(|error| {
+                    Error::corrupt(format!("invalid shallow boundary: {error}"))
+                })?,
+            );
+        }
+        Ok(boundaries)
+    }
+
+    /// Writes the shallow boundary file, removing it when empty.
+    pub(crate) fn write_shallow(&self, boundaries: &[ObjectId]) -> Result<()> {
+        let path = self.control_dir().join("shallow");
+        if boundaries.is_empty() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(Error::io(path.display().to_string(), error)),
+            }
+            return Ok(());
+        }
+
+        let mut boundaries = boundaries.to_vec();
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        let mut contents = String::new();
+        for oid in boundaries {
+            contents.push_str(&oid.to_hex());
+            contents.push('\n');
+        }
+        cvx_core::fs::write_atomic(&path, contents.as_bytes(), Some(0o644))
+    }
+
     fn validate_format(&self) -> Result<()> {
         let config = self.config()?;
 
@@ -356,10 +430,6 @@ impl Repository {
                     "reference storage '{reference_storage}'"
                 )));
             }
-        }
-
-        if config.get("extensions.partialclone").is_some() {
-            return Err(Error::unsupported("partial clone repositories"));
         }
 
         Ok(())

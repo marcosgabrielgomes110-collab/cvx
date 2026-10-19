@@ -10,10 +10,9 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: HTTPS transport alpha.** The local core, navigation, merge and
-> HTTPS transport workflows are implemented. SSH, OS keychain integration and
-> the GitHub API are not available yet. Commands are announced here as they
-> become usable.
+> **Status: transport beta.** The local core, navigation, merge, HTTPS and SSH
+> transport workflows are implemented. GitHub API/OAuth integration is not
+> available yet. Commands are announced here as they become usable.
 
 ## What works today
 
@@ -36,18 +35,23 @@ $ cvx fetch origin
 $ cvx push origin main
 ```
 
-Local paths, `file://` and `https://` are supported today. Store a token
-without putting it in the URL or repository:
+Local paths, `file://`, `https://`, `ssh://` and SCP-like URLs are supported.
+Store a token without putting it in the URL or repository:
 
 ```console
 $ printf '%s\n' "$GITHUB_TOKEN" | cvx credential store github.com
 $ cvx clone https://github.com/owner/private-repo.git
 $ cvx fetch origin
 $ cvx push origin main
+
+$ cvx clone git@github.com:owner/private-repo.git
+$ cvx clone --depth 1 https://github.com/owner/large-repo.git
+$ cvx clone --filter=blob:none https://github.com/owner/large-repo.git
 ```
 
-`ssh://` fails with an explicit unsupported-transport error until the SSH
-milestone lands.
+SSH uses the system OpenSSH client, so keys and `ssh-agent` work as usual.
+`CVX_SSH_KEY` adds an explicit identity file. Credentials prefer the OS
+keychain and fall back to a user-only `0600` file when no keychain is available.
 
 Implemented:
 
@@ -64,16 +68,21 @@ Implemented:
 - rename detection in `status` and `diff`;
 - pack writing, pack ingestion and readable/writable pack indexes;
 - object enumeration and commit/tree/tag reachability;
-- `clone`, `fetch`, `push` and remotes over local paths, `file://` and
-  `https://`;
+- `clone`, `fetch`, `push` and remotes over local paths, `file://`, `https://`
+  and `ssh://`/SCP-like URLs;
 - protocol v2 upload-pack, `ls-refs`/`fetch`, and receive-pack push;
 - HTTPS basic authentication with tokens;
-- secure user-only credential storage (`0600`) outside the repository;
+- SSH through the system OpenSSH client with key, `ssh-agent` and
+  `CVX_SSH_KEY` support;
+- OS keychain credential backend with a user-only `0600` file fallback;
+- Git credential-helper `fill`, `approve` and `reject` operations;
+- shallow clones (`--depth`) and partial clones (`--filter=blob:none` with
+  lazy blob fetch);
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: SSH transport, OS keychain integration, GitHub API and
-OAuth, shallow/partial clones, SHA-256 repositories, submodules, LFS, hooks,
+Not implemented yet: GitHub API and OAuth, shallow fetch updates/unshallow,
+`--filter` for local paths, SHA-256 repositories, submodules, LFS, hooks,
 commit signing, `.gitattributes` and CRLF normalization.
 
 ## Design decisions
@@ -159,12 +168,13 @@ mode, including repositories packed by `git gc`.
 | Command | Notes |
 | --- | --- |
 | `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--quiet` |
-| `cvx clone <URL> [DIR]` | Local paths, `file://` and `https://`; `--branch`, `--storage` |
+| `cvx clone <URL> [DIR]` | Local, `file://`, `https://`, `ssh://`; `--branch`, `--storage`, `--depth`, `--filter` |
 | `cvx remote [list]` | `add <NAME> <URL>` |
 | `cvx fetch [REMOTE]` | Updates `refs/remotes/*` and tags |
 | `cvx push [REMOTE] [BRANCH]` | `-f/--force` for non-fast-forward updates |
 | `cvx credential store <HOST>` | Reads the token from stdin; `--username` |
 | `cvx credential list` / `remove <HOST>` | Never prints stored secrets |
+| `cvx credential fill` / `approve` / `reject` | Git credential-helper protocol |
 | `cvx add <PATH>...` | `-A/--all`, `-u/--update`, `-f/--force` |
 | `cvx commit -m <MSG>` | Repeat `-m` for paragraphs; `--allow-empty` |
 | `cvx status` | `--porcelain`, `--short`, `--untracked-files=no\|normal\|all` |
@@ -225,7 +235,9 @@ $ cargo doc --workspace --no-deps
 ```
 
 The differential tests require a `git` binary in `PATH`; the CVX binary itself
-does not.
+does not. On Linux, the OS keychain backend builds against D-Bus, so install
+`libdbus-1-dev` and `pkg-config` (or set `CVX_DISABLE_KEYCHAIN=1` at runtime to
+use the file backend).
 
 ## Roadmap
 
@@ -235,8 +247,8 @@ does not.
 | 1 | Local core: objects, index, refs, commits, status, log | Complete |
 | 2A | Diff, restore/checkout, branches, switch | Complete |
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
-| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | In progress — HTTPS complete, SSH pending |
-| 4 | GitHub API, auth, pull requests, issues, releases | Planned |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
+| 4 | GitHub API, auth, pull requests, issues, releases | Next |
 | 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 
 ## Contributing

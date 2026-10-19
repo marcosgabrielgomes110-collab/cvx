@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ls-refs`/`fetch` request builders in `cvx-protocol`.
 - HTTPS smart transport with protocol v2 clone/fetch, receive-pack push and
   pack ingestion.
+- SSH transport through the system OpenSSH client, including `ssh-agent` and
+  `CVX_SSH_KEY`.
+- OS keychain credential backend with a user-only (`0600`) file fallback.
+- `cvx credential fill|approve|reject` Git credential-helper operations.
+- Shallow clones with `--depth` and partial clones with `--filter=blob:none`
+  plus lazy blob fetch.
 - `cvx credential store|list|remove` with a user-only (`0600`) credential file
   outside the repository; tokens are read from stdin and never printed.
 - `cvx merge` with fast-forward and three-way merges, including merge commits

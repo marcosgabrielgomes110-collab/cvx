@@ -29,7 +29,7 @@ flowchart TB
         Worktree --> Ignore["cvx-ignore"]
     end
 
-    subgraph Remote["Remote transport (HTTPS implemented, SSH planned)"]
+    subgraph Remote["Remote transport (HTTPS and SSH)"]
         Transport["cvx-transport<br/>HTTPS / SSH"]
         Protocol["cvx-protocol<br/>Git wire protocol"]
         Credential["cvx-credential<br/>secure token store"]

@@ -3,7 +3,8 @@
 //! Credentials are resolved from, in order:
 //!
 //! 1. `CVX_USERNAME` / `CVX_TOKEN` (or `GITHUB_TOKEN`) environment variables;
-//! 2. a user-only credential file outside the repository.
+//! 2. the operating-system keychain;
+//! 3. a user-only credential file outside the repository.
 //!
 //! The file is written with mode `0600` on Unix and is rejected on read if its
 //! permissions allow group or other access. Tokens are never written to the
@@ -17,6 +18,9 @@ use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, IoResultExt, Result};
 
+const KEYCHAIN_SERVICE: &str = "cvx";
+const DEFAULT_USERNAME: &str = "x-access-token";
+
 /// A username and secret pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Credential {
@@ -26,28 +30,52 @@ pub struct Credential {
     pub password: String,
 }
 
+/// Where a credential was stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialBackend {
+    /// The operating-system keychain.
+    Keychain,
+    /// The user-only credential file.
+    File,
+}
+
 /// User-level credential store keyed by host.
 #[derive(Debug, Clone)]
 pub struct CredentialStore {
     path: PathBuf,
+    keychain: bool,
 }
 
 impl CredentialStore {
-    /// Opens the default user credential file.
+    /// Opens the default user credential store.
     ///
-    /// `CVX_CREDENTIAL_FILE` overrides the location, which is useful for
-    /// isolated tests and CI.
+    /// `CVX_CREDENTIAL_FILE` overrides the file location. Set
+    /// `CVX_DISABLE_KEYCHAIN=1` to force file-only storage.
     pub fn open_default() -> Result<Self> {
         let path = match env::var_os("CVX_CREDENTIAL_FILE").filter(|value| !value.is_empty()) {
             Some(path) => PathBuf::from(path),
             None => config_dir()?.join("cvx").join("credentials"),
         };
-        Ok(Self { path })
+        let keychain = env::var("CVX_DISABLE_KEYCHAIN")
+            .map(|value| value != "1")
+            .unwrap_or(true);
+        Ok(Self { path, keychain })
     }
 
-    /// Opens a credential store at an explicit path.
+    /// Opens a file-only credential store at an explicit path.
     pub fn at(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            keychain: false,
+        }
+    }
+
+    /// Opens a credential store with an explicit keychain preference.
+    pub fn with_keychain(path: impl Into<PathBuf>, keychain: bool) -> Self {
+        Self {
+            path: path.into(),
+            keychain,
+        }
     }
 
     /// Returns the credential file path.
@@ -55,31 +83,77 @@ impl CredentialStore {
         &self.path
     }
 
+    /// Returns whether the keychain backend is enabled.
+    pub fn uses_keychain(&self) -> bool {
+        self.keychain
+    }
+
     /// Returns the credential for a host.
     pub fn get(&self, host: &str) -> Result<Option<Credential>> {
-        Ok(self.read_all()?.remove(host))
+        validate_host(host)?;
+        let entries = self.read_all()?;
+        let stored = entries.get(host);
+
+        if self.keychain {
+            match keychain_get(host) {
+                Ok(Some(password)) => {
+                    let username = stored
+                        .map(|credential| credential.username.clone())
+                        .unwrap_or_else(default_username);
+                    return Ok(Some(Credential { username, password }));
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    if let Some(credential) =
+                        stored.filter(|credential| !credential.password.is_empty())
+                    {
+                        return Ok(Some(credential.clone()));
+                    }
+                    return Ok(None);
+                }
+            }
+        }
+
+        Ok(stored
+            .filter(|credential| !credential.password.is_empty())
+            .cloned())
     }
 
     /// Stores or replaces a credential for a host.
-    pub fn store(&self, host: &str, credential: &Credential) -> Result<()> {
+    pub fn store(&self, host: &str, credential: &Credential) -> Result<CredentialBackend> {
         validate_host(host)?;
         validate_field(&credential.username)?;
         validate_field(&credential.password)?;
 
         let mut entries = self.read_all()?;
-        entries.insert(host.to_owned(), credential.clone());
-        self.write_all(&entries)
+        let mut stored = credential.clone();
+
+        if self.keychain && keychain_set(host, &credential.password).is_ok() {
+            stored.password.clear();
+            entries.insert(host.to_owned(), stored);
+            self.write_all(&entries)?;
+            return Ok(CredentialBackend::Keychain);
+        }
+
+        entries.insert(host.to_owned(), stored);
+        self.write_all(&entries)?;
+        Ok(CredentialBackend::File)
     }
 
     /// Removes a credential for a host, returning whether it existed.
     pub fn remove(&self, host: &str) -> Result<bool> {
         validate_host(host)?;
         let mut entries = self.read_all()?;
-        let removed = entries.remove(host).is_some();
-        if removed {
+        let removed_file = entries.remove(host).is_some();
+        let removed_keychain = if self.keychain {
+            keychain_delete(host).unwrap_or(false)
+        } else {
+            false
+        };
+        if removed_file {
             self.write_all(&entries)?;
         }
-        Ok(removed)
+        Ok(removed_file || removed_keychain)
     }
 
     /// Lists hosts with stored credentials.
@@ -161,7 +235,7 @@ pub fn resolve_for_host(host: &str) -> Result<Option<Credential>> {
         let username = env::var("CVX_USERNAME")
             .ok()
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "x-access-token".to_owned());
+            .unwrap_or_else(default_username);
         return Ok(Some(Credential {
             username,
             password: token,
@@ -169,6 +243,53 @@ pub fn resolve_for_host(host: &str) -> Result<Option<Credential>> {
     }
 
     CredentialStore::open_default()?.get(host)
+}
+
+/// Parses Git credential-helper input into key/value pairs.
+pub fn parse_helper_input(input: &str) -> BTreeMap<String, String> {
+    let mut fields = BTreeMap::new();
+    for line in input.lines() {
+        if let Some((key, value)) = line.split_once('=') {
+            fields.insert(key.trim().to_owned(), value.to_owned());
+        }
+    }
+    fields
+}
+
+fn default_username() -> String {
+    env::var("CVX_USERNAME")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_USERNAME.to_owned())
+}
+
+fn keychain_entry(host: &str) -> Result<keyring::Entry> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, host)
+        .map_err(|error| Error::Message(format!("keychain error: {error}")))
+}
+
+fn keychain_get(host: &str) -> Result<Option<String>> {
+    let entry = keychain_entry(host)?;
+    match entry.get_password() {
+        Ok(password) => Ok(Some(password)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(Error::Message(format!("keychain error: {error}"))),
+    }
+}
+
+fn keychain_set(host: &str, password: &str) -> Result<()> {
+    keychain_entry(host)?
+        .set_password(password)
+        .map_err(|error| Error::Message(format!("keychain error: {error}")))
+}
+
+fn keychain_delete(host: &str) -> Result<bool> {
+    let entry = keychain_entry(host)?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(error) => Err(Error::Message(format!("keychain error: {error}"))),
+    }
 }
 
 fn config_dir() -> Result<PathBuf> {
@@ -238,7 +359,10 @@ mod tests {
         let store = CredentialStore::at(temp.path().join("config/credentials"));
         assert!(store.get("github.com").expect("get").is_none());
 
-        store.store("github.com", &credential()).expect("store");
+        assert_eq!(
+            store.store("github.com", &credential()).expect("store"),
+            CredentialBackend::File
+        );
         assert_eq!(store.get("github.com").expect("get"), Some(credential()));
         assert_eq!(store.hosts().expect("hosts"), vec!["github.com"]);
 
@@ -286,5 +410,14 @@ mod tests {
         std::fs::write(&path, "bad record\n").expect("write");
         let store = CredentialStore::at(&path);
         assert!(store.get("github.com").is_err());
+    }
+
+    #[test]
+    fn parses_helper_input() {
+        let fields = parse_helper_input(
+            "protocol=https\nhost=github.com\nusername=x-access-token\npassword=secret\n\n",
+        );
+        assert_eq!(fields.get("host").map(String::as_str), Some("github.com"));
+        assert_eq!(fields.get("password").map(String::as_str), Some("secret"));
     }
 }

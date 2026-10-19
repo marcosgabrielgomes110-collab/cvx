@@ -70,6 +70,7 @@ criterion = "0.5"
 flate2 = "1.0"
 home = "0.5"
 ignore = "0.4"
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service"] }
 predicates = "3.1"
 proptest = "1.4"
 serde = { version = "1.0", features = ["derive"] }

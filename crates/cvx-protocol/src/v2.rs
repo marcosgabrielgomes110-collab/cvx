@@ -54,6 +54,12 @@ pub struct FetchRequest {
     pub include_tag: bool,
     /// Allow offset deltas.
     pub ofs_delta: bool,
+    /// Shallow depth requested from the server.
+    pub deepen: Option<u32>,
+    /// Existing shallow boundaries known by the client.
+    pub shallow: Vec<ObjectId>,
+    /// Partial-clone filter specification, such as `blob:none`.
+    pub filter: Option<String>,
 }
 
 impl FetchRequest {
@@ -85,6 +91,16 @@ impl FetchRequest {
         }
         if self.ofs_delta {
             arguments.push("ofs-delta".to_owned());
+        }
+        if let Some(depth) = self.deepen {
+            arguments.push(format!("deepen {depth}"));
+        }
+        for oid in &self.shallow {
+            arguments.push(format!("shallow {oid}"));
+        }
+        if let Some(filter) = &self.filter {
+            validate_argument(filter)?;
+            arguments.push(format!("filter {filter}"));
         }
         encode_request("fetch", &arguments)
     }
@@ -190,6 +206,9 @@ mod tests {
             no_progress: true,
             include_tag: true,
             ofs_delta: true,
+            deepen: Some(1),
+            shallow: vec![oid(3)],
+            filter: Some("blob:none".to_owned()),
         };
         let packets = parse_all(&request.encode().expect("encode")).expect("parse");
         let data: Vec<String> = packets
@@ -204,6 +223,9 @@ mod tests {
         assert!(data.contains(&"no-progress".to_owned()));
         assert!(data.contains(&"include-tag".to_owned()));
         assert!(data.contains(&"ofs-delta".to_owned()));
+        assert!(data.contains(&"deepen 1".to_owned()));
+        assert!(data.contains(&format!("shallow {}", oid(3))));
+        assert!(data.contains(&"filter blob:none".to_owned()));
     }
 
     #[test]

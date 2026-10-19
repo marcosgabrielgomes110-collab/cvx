@@ -92,11 +92,15 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Pack ingestion | Yes | Self-contained packs; thin packs are rejected |
 | Clone / fetch / push over local paths | Yes | `file://` and filesystem paths |
 | Clone / fetch / push over HTTPS | Yes | Protocol v2 fetch, receive-pack push |
-| Clone / fetch / push over SSH | Not implemented | Explicit unsupported-transport error |
+| Clone / fetch / push over SSH | Yes | System OpenSSH, keys and `ssh-agent` |
 | HTTPS token authentication | Yes | Basic auth via env or credential store |
+| OS keychain integration | Yes | Falls back to a file when unavailable |
 | Credential file | Yes | User-only `0600`, outside the repository |
-| OS keychain integration | Not implemented | Planned |
-| Shallow / partial clone | Not implemented | |
+| Credential helper | Yes | `fill`, `approve`, `reject` |
+| Shallow clone | Yes | `--depth` for network clones |
+| Partial clone | Limited | `--filter=blob:none`; lazy fetch per missing object |
+| Shallow fetch update / unshallow | Not implemented | |
+| Partial clone with arbitrary filters | Limited | `blob:none` is the tested filter |
 | GitHub API and authentication | Not implemented |
 | Shallow and partial clones | Not implemented |
 | Replace refs and grafts | Not implemented |

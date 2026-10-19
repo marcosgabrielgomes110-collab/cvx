@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use cvx_core::{Error, Result};
 use cvx_object::{ObjectId, ObjectKind};
-use cvx_revision::{LogEntry, walk_commits};
+use cvx_revision::{LogEntry, walk_commits_with_boundary};
 
 use crate::repository::Repository;
 
@@ -19,7 +19,8 @@ impl Repository {
     /// Walks commit history from a revision.
     pub fn log(&self, options: &LogOptions) -> Result<Vec<LogEntry>> {
         let start = self.resolve_revision(options.revision.as_deref().unwrap_or("HEAD"))?;
-        walk_commits(start, options.limit, |oid| self.read_commit(oid))
+        let boundary: std::collections::HashSet<_> = self.shallow_commits()?.into_iter().collect();
+        walk_commits_with_boundary(start, options.limit, &boundary, |oid| self.read_commit(oid))
     }
 
     /// Returns branch and tag names keyed by the commit they decorate.
@@ -185,5 +186,65 @@ impl Repository {
                 "short object id '{revision}' is ambiguous"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AddOptions, CommitOptions, InitOptions};
+    use std::path::PathBuf;
+
+    fn shallow_test_repository(temp: &std::path::Path) -> (Repository, Vec<ObjectId>) {
+        let repository = match Repository::init(InitOptions {
+            directory: temp.to_path_buf(),
+            ..InitOptions::default()
+        })
+        .expect("init")
+        {
+            crate::InitOutcome::Created(repository) => repository,
+            _ => panic!("expected new repository"),
+        };
+        let config = repository.control_dir().join("config");
+        let mut contents = std::fs::read_to_string(&config).expect("config");
+        contents.push_str("\n[user]\n\tname = Test User\n\temail = test@example.com\n");
+        std::fs::write(config, contents).expect("config");
+
+        let mut commits = Vec::new();
+        for index in 0..3 {
+            std::fs::write(temp.join("file.txt"), format!("{index}\n")).expect("write");
+            repository
+                .add(AddOptions {
+                    paths: vec![PathBuf::from(".")],
+                    cwd: temp.to_path_buf(),
+                    force: false,
+                    update: false,
+                    all: true,
+                })
+                .expect("add");
+            commits.push(
+                repository
+                    .commit(CommitOptions {
+                        messages: vec![format!("commit {index}")],
+                        allow_empty: false,
+                    })
+                    .expect("commit")
+                    .oid,
+            );
+        }
+        (repository, commits)
+    }
+
+    #[test]
+    fn log_stops_at_shallow_boundaries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let (repository, commits) = shallow_test_repository(temp.path());
+        repository
+            .write_shallow(&[commits[1]])
+            .expect("write shallow");
+
+        let entries = repository.log(&LogOptions::default()).expect("shallow log");
+        let oids: Vec<ObjectId> = entries.iter().map(|entry| entry.oid).collect();
+        assert_eq!(oids, vec![commits[2], commits[1]]);
     }
 }

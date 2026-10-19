@@ -27,7 +27,9 @@ Security-sensitive areas include:
   `switch`;
 - ref-name and configuration parsing;
 - HTTPS protocol framing, redirects and token handling;
-- credential storage permissions and secret leakage;
+- SSH process invocation, host-key policy and remote path quoting;
+- keychain and credential-file storage permissions and secret leakage;
+- shallow boundaries and partial-clone lazy object fetching;
 - decompression, pack ingestion and delta-chain resource limits.
 
 ## Design commitments
@@ -43,6 +45,10 @@ Security-sensitive areas include:
 - HTTP redirects are not followed for authenticated transport requests.
 - Tokens are read from standard input or environment variables, not command
   line arguments.
+- SSH host keys use `StrictHostKeyChecking=accept-new`; authentication is
+  delegated to OpenSSH and `ssh-agent`.
+- The keychain is preferred; file fallback is `0600` and rejected if group or
+  other permissions are present.
 
 ## Disclosure
 

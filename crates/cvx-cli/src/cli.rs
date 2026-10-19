@@ -117,6 +117,14 @@ pub struct CloneArgs {
     /// Control-directory convention to create.
     #[arg(long, value_enum, default_value = "cvx", value_name = "STORAGE")]
     pub storage: StorageArg,
+
+    /// Create a shallow clone with this depth.
+    #[arg(long, value_name = "N")]
+    pub depth: Option<u32>,
+
+    /// Partial-clone filter, for example `blob:none`.
+    #[arg(long, value_name = "FILTER")]
+    pub filter: Option<String>,
 }
 
 /// Arguments for `cvx remote`.
@@ -195,6 +203,12 @@ pub enum CredentialCommand {
         #[arg(value_name = "HOST")]
         host: String,
     },
+    /// Git credential-helper `fill` operation.
+    Fill,
+    /// Git credential-helper `approve` operation.
+    Approve,
+    /// Git credential-helper `reject` operation.
+    Reject,
 }
 
 /// Arguments for `cvx add`.

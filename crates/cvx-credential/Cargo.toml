@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 cvx-core = { workspace = true }
+keyring = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -6,7 +6,7 @@ use cvx_core::{Error, IoResultExt, Result};
 use cvx_index::IndexLock;
 use cvx_object::ObjectId;
 use cvx_pack::PackInput;
-use cvx_transport::{HttpTransport, PushCommand};
+use cvx_transport::{NetworkTransport, PushCommand, looks_like_scp};
 
 use crate::init::{InitOptions, InitStorage};
 use crate::repository::{CVX_DIR, GIT_DIR, Repository};
@@ -35,6 +35,10 @@ pub struct CloneOptions {
     pub branch: Option<String>,
     /// Control-directory convention.
     pub storage: InitStorage,
+    /// Shallow history depth.
+    pub depth: Option<u32>,
+    /// Partial-clone filter, such as `blob:none`.
+    pub filter: Option<String>,
 }
 
 /// Result of a clone.
@@ -150,8 +154,13 @@ impl Repository {
 
     /// Clones a repository into a new directory.
     pub fn clone_local(options: &CloneOptions) -> Result<CloneOutcome> {
-        if is_http_url(&options.url) {
+        if is_network_url(&options.url) {
             return Self::clone_http(options);
+        }
+        if options.depth.is_some() || options.filter.is_some() {
+            return Err(Error::unsupported(
+                "shallow and filtered clones from local paths",
+            ));
         }
         let source = open_local_remote(&options.url)?;
         let source_url = source
@@ -239,7 +248,7 @@ impl Repository {
 
     fn clone_http(options: &CloneOptions) -> Result<CloneOutcome> {
         ensure_empty_destination(&options.directory)?;
-        let transport = HttpTransport::open(&options.url)?;
+        let transport = NetworkTransport::open(&options.url)?;
         let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
 
         let mut heads = BTreeMap::new();
@@ -288,8 +297,9 @@ impl Repository {
         wants.sort_unstable();
         wants.dedup();
 
-        let pack = transport.fetch(&wants)?;
-        let objects = cvx_pack::ingest_pack(&pack)?;
+        let response =
+            transport.fetch_full(&wants, options.depth, &[], options.filter.as_deref())?;
+        let objects = cvx_pack::ingest_pack(&response.pack)?;
 
         let init = Repository::init(InitOptions {
             directory: options.directory.clone(),
@@ -304,6 +314,10 @@ impl Repository {
         };
         for object in &objects {
             repository.objects().write(object.kind, &object.data)?;
+        }
+        repository.write_shallow(&response.shallow)?;
+        if options.filter.is_some() {
+            repository.append_config(&format!("\n[cvx]\n\tpartialclone = {DEFAULT_REMOTE}\n"))?;
         }
 
         finish_clone(
@@ -323,7 +337,7 @@ impl Repository {
         let url = self
             .remote_url(remote_name)?
             .ok_or_else(|| Error::Message(format!("remote '{remote_name}' is not configured")))?;
-        if is_http_url(&url) {
+        if is_network_url(&url) {
             return self.fetch_http(remote_name, &url);
         }
         let source = open_local_remote(&url)?;
@@ -400,7 +414,7 @@ impl Repository {
     }
 
     fn fetch_http(&self, remote_name: &str, url: &str) -> Result<FetchOutcome> {
-        let transport = HttpTransport::open(url)?;
+        let transport = NetworkTransport::open(url)?;
         let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
 
         let mut heads = BTreeMap::new();
@@ -513,7 +527,7 @@ impl Repository {
         let url = self
             .remote_url(remote_name)?
             .ok_or_else(|| Error::Message(format!("remote '{remote_name}' is not configured")))?;
-        if is_http_url(&url) {
+        if is_network_url(&url) {
             return self.push_http(options, remote_name, &branch, tip, &url);
         }
         let remote = open_local_remote(&url)?;
@@ -574,7 +588,7 @@ impl Repository {
         tip: ObjectId,
         url: &str,
     ) -> Result<PushOutcome> {
-        let transport = HttpTransport::open(url)?;
+        let transport = NetworkTransport::open(url)?;
         let advertisement = transport.discover_receive_pack()?;
         let reference = format!("refs/heads/{branch}");
         let old = advertisement
@@ -671,13 +685,6 @@ fn finish_clone(
             .update_ref(&format!("refs/tags/{name}"), *oid, None)?;
     }
 
-    let snapshot = repository.tree_snapshot_for_commit(head)?;
-    let filemode = repository.filemode()?;
-    repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
-    let index = repository.index_from_tree(&snapshot, filemode)?;
-    let lock = IndexLock::acquire(repository.control_dir())?;
-    lock.commit(&index)?;
-
     repository.append_config(&format!(
         "\n[remote \"{remote_name}\"]\n\turl = {}\n\tfetch = +refs/heads/*:refs/remotes/{remote_name}/*\n",
         remote_url.replace('\n', "")
@@ -685,6 +692,13 @@ fn finish_clone(
     repository.append_config(&format!(
         "\n[branch \"{branch}\"]\n\tremote = {remote_name}\n\tmerge = refs/heads/{branch}\n"
     ))?;
+
+    let snapshot = repository.tree_snapshot_for_commit(head)?;
+    let filemode = repository.filemode()?;
+    repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
+    let index = repository.index_from_tree(&snapshot, filemode)?;
+    let lock = IndexLock::acquire(repository.control_dir())?;
+    lock.commit(&index)?;
 
     Ok(CloneOutcome {
         repository,
@@ -710,8 +724,11 @@ fn ensure_empty_destination(directory: &Path) -> Result<()> {
     Ok(())
 }
 
-fn is_http_url(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
+fn is_network_url(url: &str) -> bool {
+    url.starts_with("https://")
+        || url.starts_with("http://")
+        || url.starts_with("ssh://")
+        || looks_like_scp(url)
 }
 
 fn open_local_remote(url: &str) -> Result<Repository> {

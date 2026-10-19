@@ -47,7 +47,20 @@ impl PartialOrd for HeapItem {
 /// `read` is called only for commits not already cached. The result is limited
 /// by `limit` when provided. Missing commits and malformed objects surface as
 /// errors instead of being skipped.
-pub fn walk_commits<F>(start: ObjectId, limit: Option<usize>, mut read: F) -> Result<Vec<LogEntry>>
+pub fn walk_commits<F>(start: ObjectId, limit: Option<usize>, read: F) -> Result<Vec<LogEntry>>
+where
+    F: FnMut(ObjectId) -> Result<Commit>,
+{
+    walk_commits_with_boundary(start, limit, &HashSet::new(), read)
+}
+
+/// Walks commits while treating the given shallow boundaries as roots.
+pub fn walk_commits_with_boundary<F>(
+    start: ObjectId,
+    limit: Option<usize>,
+    boundary: &HashSet<ObjectId>,
+    mut read: F,
+) -> Result<Vec<LogEntry>>
 where
     F: FnMut(ObjectId) -> Result<Commit>,
 {
@@ -83,6 +96,9 @@ where
 
         if limit.is_some_and(|limit| entries.len() >= limit) {
             break;
+        }
+        if boundary.contains(&item.oid) {
+            continue;
         }
 
         for parent in &commit.parents {

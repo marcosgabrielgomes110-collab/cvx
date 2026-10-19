@@ -24,6 +24,17 @@ pub struct RemoteRef {
     pub symref: Option<String>,
 }
 
+/// Parsed fetch response.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FetchResponse {
+    /// Packfile bytes.
+    pub pack: Vec<u8>,
+    /// Shallow boundaries reported by the server.
+    pub shallow: Vec<ObjectId>,
+    /// Commits that are no longer shallow.
+    pub unshallow: Vec<ObjectId>,
+}
+
 /// Parsed `ls-refs` response.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LsRefsResponse {
@@ -144,6 +155,17 @@ impl HttpTransport {
     ///
     /// `thin` is disabled because CVX ingests self-contained packs only.
     pub fn fetch(&self, wants: &[ObjectId]) -> Result<Vec<u8>> {
+        Ok(self.fetch_full(wants, None, &[], None)?.pack)
+    }
+
+    /// Fetches with shallow depth and/or a partial-clone filter.
+    pub fn fetch_full(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+    ) -> Result<FetchResponse> {
         let request = FetchRequest {
             wants: wants.to_vec(),
             haves: Vec::new(),
@@ -152,6 +174,9 @@ impl HttpTransport {
             no_progress: true,
             include_tag: true,
             ofs_delta: true,
+            deepen,
+            shallow: shallow.to_vec(),
+            filter: filter.map(str::to_owned),
         };
         let body = request.encode()?;
         let url = format!("{}/git-upload-pack", self.base);
@@ -330,7 +355,7 @@ fn parse_advertisement_capabilities(bytes: &[u8]) -> Result<BTreeMap<String, Opt
     cvx_protocol::parse_capabilities(&lines)
 }
 
-fn parse_ls_refs(bytes: &[u8]) -> Result<LsRefsResponse> {
+pub(crate) fn parse_ls_refs(bytes: &[u8]) -> Result<LsRefsResponse> {
     let mut response = LsRefsResponse::default();
     for packet in parse_all(bytes)? {
         let PktLine::Data(data) = packet else {
@@ -413,8 +438,8 @@ fn parse_unborn_head(line: &[u8]) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn parse_fetch_response(bytes: &[u8]) -> Result<Vec<u8>> {
-    let mut pack = Vec::new();
+pub(crate) fn parse_fetch_response(bytes: &[u8]) -> Result<FetchResponse> {
+    let mut response = FetchResponse::default();
     let mut in_packfile = false;
 
     for packet in parse_all(bytes)? {
@@ -433,6 +458,18 @@ fn parse_fetch_response(bytes: &[u8]) -> Result<Vec<u8>> {
                     String::from_utf8_lossy(&line[4..])
                 )));
             }
+            if let Some(value) = line.strip_prefix(b"shallow ") {
+                if let Ok(oid) = ObjectId::from_hex(&String::from_utf8_lossy(value)) {
+                    response.shallow.push(oid);
+                }
+                continue;
+            }
+            if let Some(value) = line.strip_prefix(b"unshallow ") {
+                if let Ok(oid) = ObjectId::from_hex(&String::from_utf8_lossy(value)) {
+                    response.unshallow.push(oid);
+                }
+                continue;
+            }
             if line == b"acknowledgments"
                 || line == b"shallow-info"
                 || line == b"wanted-refs"
@@ -443,17 +480,17 @@ fn parse_fetch_response(bytes: &[u8]) -> Result<Vec<u8>> {
                 continue;
             }
             if data.first().is_some_and(|byte| (1..=3).contains(byte)) {
-                append_sideband(&mut pack, &data)?;
+                append_sideband(&mut response.pack, &data)?;
             }
             continue;
         }
-        append_sideband(&mut pack, &data)?;
+        append_sideband(&mut response.pack, &data)?;
     }
 
-    if pack.is_empty() {
+    if response.pack.is_empty() {
         return Err(Error::Message("remote did not send a packfile".to_owned()));
     }
-    Ok(pack)
+    Ok(response)
 }
 
 fn append_sideband(pack: &mut Vec<u8>, data: &[u8]) -> Result<()> {
@@ -473,7 +510,7 @@ fn append_sideband(pack: &mut Vec<u8>, data: &[u8]) -> Result<()> {
     }
 }
 
-fn parse_receive_advertisement(bytes: &[u8]) -> Result<ReceivePackAdvertisement> {
+pub(crate) fn parse_receive_advertisement(bytes: &[u8]) -> Result<ReceivePackAdvertisement> {
     let mut advertisement = ReceivePackAdvertisement::default();
     for packet in parse_all(bytes)? {
         let PktLine::Data(data) = packet else {
@@ -502,7 +539,7 @@ fn parse_receive_advertisement(bytes: &[u8]) -> Result<ReceivePackAdvertisement>
     Ok(advertisement)
 }
 
-fn parse_push_response(bytes: &[u8]) -> Result<PushReport> {
+pub(crate) fn parse_push_response(bytes: &[u8]) -> Result<PushReport> {
     let mut report_text = Vec::new();
     let mut messages = Vec::new();
     for packet in parse_all(bytes)? {
@@ -650,7 +687,7 @@ mod tests {
         body.extend(encode_data(b"\x01PACKdata").expect("pkt"));
         body.extend(encode_data(b"\x02progress").expect("pkt"));
         body.extend(flush());
-        assert_eq!(parse_fetch_response(&body).expect("pack"), b"PACKdata");
+        assert_eq!(parse_fetch_response(&body).expect("pack").pack, b"PACKdata");
     }
 
     #[test]

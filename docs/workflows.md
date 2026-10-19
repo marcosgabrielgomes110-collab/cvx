@@ -154,11 +154,14 @@ sequenceDiagram
     Repo-->>CLI: push outcome
 ```
 
-## HTTPS clone and push
+## HTTPS and SSH clone and push
 
 HTTPS uses protocol v2 upload-pack for clone/fetch and receive-pack for push.
-Credentials come from the environment or the user-only credential file and are
-never stored in the repository. SSH is still planned.
+SSH reuses the same protocol over the system OpenSSH client, with keys and
+`ssh-agent` handled by OpenSSH. Credentials come from the environment, the OS
+keychain, or the user-only credential file and are never stored in the
+repository. `--depth` requests shallow boundaries and `--filter=blob:none`
+enables lazy blob fetches.
 
 ```mermaid
 sequenceDiagram

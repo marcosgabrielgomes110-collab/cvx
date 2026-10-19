@@ -17,6 +17,8 @@ pub fn run(args: CloneArgs) -> Result<()> {
         directory,
         branch: args.branch,
         storage: args.storage.into(),
+        depth: args.depth,
+        filter: args.filter,
     })?;
 
     println!(
