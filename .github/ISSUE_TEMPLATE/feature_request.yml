@@ -1,0 +1,54 @@
+name: Feature request
+description: Suggest a compatible workflow or engine capability.
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CVX prioritizes Git interoperability and explicit scope. Explain the
+        workflow, not only the command name.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is blocked or painful today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Commands, flags and expected output.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Git compatibility
+      description: Which Git behavior, format or protocol should this match?
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Repository core
+        - Index and worktree
+        - Diff and merge
+        - Refs and branches
+        - Packfiles and transport
+        - GitHub integration
+        - CLI and documentation
+        - Performance and security
+    validations:
+      required: true
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Scope
+      options:
+        - label: I understand this may be documented as unsupported until implemented.
+        - label: I can help with tests or a prototype.

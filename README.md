@@ -2,14 +2,47 @@
 
 **Own your history. Connect your code.**
 
+[![CI](https://github.com/marcosgabrielgomes110-collab/cvx/actions/workflows/ci.yml/badge.svg)](https://github.com/marcosgabrielgomes110-collab/cvx/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+
 CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: local core alpha.** `cvx init`, `add`, `commit`, `status` and `log`
-> are implemented. Network operations, checkout, merges, tags creation and the
-> GitHub integration are not available yet. Commands are announced here as they
-> become usable, never before.
+> **Status: local workflow alpha.** The local core and navigation workflow are
+> implemented. Network operations, merges and GitHub integration are not
+> available yet. Commands are announced here as they become usable.
+
+## What works today
+
+```console
+$ cvx init
+$ cvx add .
+$ cvx commit -m "feat: first commit"
+$ cvx status
+$ cvx log --oneline
+$ cvx diff
+$ cvx restore --staged file.rs
+$ cvx checkout -- file.rs
+$ cvx branch feature/auth
+$ cvx switch feature/auth
+```
+
+Implemented:
+
+- Git-compatible `.cvx/` storage and direct `.git/` compatibility mode;
+- loose objects and packfile reads, including delta chains;
+- index versions 2 through 4 on input;
+- refs, packed refs, detached HEAD and reflogs;
+- `init`, `add`, `commit`, `status`, `log`, `diff`, `restore`, `checkout`,
+  `branch` and `switch`;
+- safe worktree checkout with path, symlink and untracked-file protection;
+- differential tests against the official Git binary.
+
+Not implemented yet: clone/fetch/push, merge/conflicts, tags creation, GitHub
+authentication and APIs, SHA-256 repositories, submodules, LFS, hooks, commit
+signing, `.gitattributes` and CRLF normalization.
 
 ## Design decisions
 
@@ -19,15 +52,37 @@ tooling keep working, but the engine does not shell out to the `git` executable.
   Git repositories in `.git/` are opened directly in compatibility mode.
 - **No runtime Git dependency.** The official Git binary is used only as a
   compatibility oracle in tests. Production code never invokes it.
-- **Engine written in Rust.** Parsing, hashing, object storage, index, refs,
-  packfiles and commit traversal are implemented in this workspace, with
-  primitive crates for SHA-1, zlib, byte strings and command-line parsing.
-- **Loose writes, packed reads.** CVX writes loose objects and reads both loose
-  objects and version-2 packfiles, including delta chains.
-- **SHA-1 first.** Repositories declaring SHA-256 are detected and rejected
-  explicitly instead of being opened with mixed identifier widths.
-- **Unsupported means unsupported.** Features outside the current milestone
-  fail with a clear error; they are never silently simulated.
+- **Engine written in Rust.** Parsing, hashing, storage, index, refs, packs,
+  diffing and commit traversal are implemented in this workspace, with
+  primitive crates for SHA-1, zlib, text diffing and CLI parsing.
+- **Loose writes, packed reads.** CVX writes loose objects and reads loose
+  objects and version-2/3 packfiles.
+- **SHA-1 first.** SHA-256 repositories are detected and rejected explicitly.
+- **Unsupported means unsupported.** Features outside the current milestone fail
+  with a clear error; they are never silently simulated.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CLI["cvx-cli"] --> Repo["cvx-repository"]
+    Repo --> Core["cvx-core"]
+    Repo --> Object["cvx-object"]
+    Repo --> ODB["cvx-odb"]
+    Repo --> Index["cvx-index"]
+    Repo --> Refs["cvx-ref"]
+    Repo --> Revision["cvx-revision"]
+    Repo --> Diff["cvx-diff"]
+    Repo --> Worktree["cvx-worktree"]
+    ODB --> Pack["cvx-pack"]
+    Worktree --> Ignore["cvx-ignore"]
+    Repo -. planned .-> Transport["cvx-transport"]
+    Transport -. planned .-> GitHub["cvx-github-workflow"]
+```
+
+Full diagrams for crate dependencies, repository discovery, the object model,
+commit flow and future transports live in
+[docs/architecture.md](docs/architecture.md).
 
 ## Quick start
 
@@ -38,15 +93,6 @@ Initialized empty CVX repository in /tmp/demo/.cvx/
 $ cd /tmp/demo
 $ printf 'hello\n' > hello.txt
 $ cvx add .
-$ cvx status
-On branch main
-
-No commits yet
-
-Changes to be committed:
-  (use "cvx add <file>..." to update what will be committed)
-        new file:     hello.txt
-
 $ cvx commit -m "feat: first commit"
 [main (root-commit) 1c2d3e4] feat: first commit
 
@@ -62,8 +108,7 @@ $ git --git-dir=.cvx --work-tree=. fsck --strict
 $ git --git-dir=.cvx --work-tree=. log
 ```
 
-The `.cvx/` directory is hidden from Git's status by `.cvx/info/exclude`, so a
-CVX worktree stays clean when inspected with the Git CLI.
+`.cvx/info/exclude` hides the control directory from Git's status.
 
 To create a standard `.git/` repository instead:
 
@@ -71,15 +116,8 @@ To create a standard `.git/` repository instead:
 $ cvx init --storage git
 ```
 
-Existing Git repositories are detected automatically:
-
-```console
-$ cvx init
-Detected existing Git repository in /path/to/repo/.git/; CVX will use it in compatibility mode
-```
-
-Existing `.git/` repositories can be read, modified and committed to directly,
-including repositories whose objects have been packed by `git gc`.
+Existing Git repositories are detected automatically and used in compatibility
+mode, including repositories packed by `git gc`.
 
 ## Commands
 
@@ -90,21 +128,48 @@ including repositories whose objects have been packed by `git gc`.
 | `cvx commit -m <MSG>` | Repeat `-m` for paragraphs; `--allow-empty` |
 | `cvx status` | `--porcelain`, `--short`, `--untracked-files=no\|normal\|all` |
 | `cvx log [REVISION]` | `--oneline`, `-n/--max-count` |
+| `cvx diff [REV...] [-- PATH...]` | `--cached`, `--stat`, `-U<n>` |
+| `cvx restore <PATH>...` | `--staged`, `--worktree`, `--source`, `--force` |
+| `cvx checkout -- <PATH>...` | Restore worktree files from the index |
+| `cvx branch [NAME] [START]` | `--list`, `-d`, `-D` |
+| `cvx switch <BRANCH>` | `-c`, `--detach`, `--force` |
 | `cvx version` | Engine and repository format information |
 
-## Workspace
+## Benchmarks
 
-The workspace contains the full crate map from the architecture:
+Illustrative reporting format — **not measured CVX results**:
 
-| Area | Crates |
-| --- | --- |
-| Engine | `cvx-core`, `cvx-object`, `cvx-odb`, `cvx-pack`, `cvx-index`, `cvx-ref`, `cvx-config`, `cvx-ignore`, `cvx-attributes`, `cvx-revision`, `cvx-worktree`, `cvx-diff`, `cvx-merge` |
-| Orchestration | `cvx-repository`, `cvx-cli` |
-| Network and GitHub | `cvx-protocol`, `cvx-transport`, `cvx-credential`, `cvx-github-api`, `cvx-github-workflow` |
-| Testing | `cvx-testkit` |
+```markdown
+# Read benchmark
 
-Crates outside the current milestone contain documentation but no public API
-yet. They will be filled as the corresponding phases start.
+**Environment:** Arch Linux x86_64
+**Language:** Rust stable, release profile
+**Data:** 1,000,000 records
+
+| Operation | Time |
+|---|---:|
+| Sequential read | 120 ms |
+| Index lookup | 3 ms |
+
+> Values are illustrative. Run the benchmarks on your machine.
+```
+
+The benchmark policy and planned scenarios are in
+[docs/benchmarks.md](docs/benchmarks.md).
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture and Mermaid diagrams](docs/architecture.md)
+- [Workflows and sequence diagrams](docs/workflows.md)
+- [Compatibility matrix](docs/compatibility.md)
+- [Roadmap](docs/roadmap.md)
+- [Repository layout](docs/spec/repository-layout.md)
+- [Detailed design notes](docs/architecture/overview.md)
+- [Benchmarks](docs/benchmarks.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Build and test
 
@@ -113,24 +178,29 @@ $ cargo build --workspace
 $ cargo test --workspace
 $ cargo fmt --all --check
 $ cargo clippy --workspace --all-targets -- -D warnings
+$ cargo doc --workspace --no-deps
 ```
 
 The differential tests require a `git` binary in `PATH`; the CVX binary itself
 does not.
 
-## Compatibility
+## Roadmap
 
-See [docs/compatibility.md](docs/compatibility.md) for the current matrix and
-[docs/architecture/overview.md](docs/architecture/overview.md) for the design.
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 0 | Specification, architecture, compatibility contract | Complete |
+| 1 | Local core: objects, index, refs, commits, status, log | Complete |
+| 2A | Diff, restore/checkout, branches, switch | Complete |
+| 2B | Merge, conflicts, tags creation, rename detection | Next |
+| 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Planned |
+| 4 | GitHub API, auth, pull requests, issues, releases | Planned |
+| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Ongoing |
 
-Implemented compatibility includes loose objects, version-2 packfiles with
-delta chains, index versions 2 through 4 (writing version 2, or 3 when extended
-flags are needed), loose and packed refs, reflogs, annotated tag peeling,
-`.gitignore` rules and worktree status.
+## Contributing
 
-Not implemented yet: clone/fetch/push, checkout, branch creation, merge, diff,
-tags creation, SHA-256 repositories, reftable, submodules, LFS, hooks, commit
-signing, `.gitattributes`, CRLF normalization and binary pack writing.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening
+a large pull request. Security issues should follow [SECURITY.md](SECURITY.md),
+not public issues.
 
 ## License
 

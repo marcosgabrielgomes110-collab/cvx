@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked -p cvx-cli
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          archive="cvx-${RUNNER_OS}-${RUNNER_ARCH}.tar.gz"
+          tar -czf "$archive" -C target/release cvx
+          shasum -a 256 "$archive" > "$archive.sha256"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = "cvx-$env:RUNNER_OS-$env:RUNNER_ARCH.zip"
+          Compress-Archive -Path target/release/cvx.exe -DestinationPath $archive
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          "$hash  $archive" | Out-File "$archive.sha256" -Encoding ascii
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvx-${{ matrix.os }}
+          path: |
+            cvx-*.tar.gz
+            cvx-*.tar.gz.sha256
+            cvx-*.zip
+            cvx-*.zip.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged binaries
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            cvx-*.tar.gz
+            cvx-*.tar.gz.sha256
+            cvx-*.zip
+            cvx-*.zip.sha256

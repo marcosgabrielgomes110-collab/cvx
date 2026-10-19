@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/marcosgabrielgomes110-collab/cvx/security/advisories/new
+    about: Report security issues privately. Do not open a public issue.
+  - name: Architecture and compatibility
+    url: https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/architecture.md
+    about: Read the architecture and compatibility docs before proposing large changes.

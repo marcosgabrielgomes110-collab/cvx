@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible defect in CVX.
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include tokens, private keys or
+        sensitive repository contents. Security issues must follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: CVX version
+      description: Output of `cvx version`.
+      placeholder: "cvx 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "Arch Linux x86_64, macOS 15 arm64, Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Commands and repository state needed to reproduce the issue.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste error messages or `cvx status`/`cvx log` output.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: compatibility
+    attributes:
+      label: Compatibility
+      options:
+        - label: The repository was created by CVX
+        - label: The repository was created by Git
+        - label: The repository was packed with `git gc`
+        - label: The issue involves a worktree or submodule

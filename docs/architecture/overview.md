@@ -33,10 +33,12 @@ not an import/export pipeline.
 ```text
 cvx-cli
    |
-cvx-repository        use cases: init, add, commit, status, log
+cvx-repository        use cases: init, add, commit, status, log,
+   |                  diff, restore, checkout, branch, switch
    |
    +-- cvx-revision   revision parsing and commit graph
    +-- cvx-worktree   worktree scan and status
+   +-- cvx-diff       unified diff rendering
    +-- cvx-index      staging area
    +-- cvx-ref        refs, HEAD, packed-refs, reflogs
    +-- cvx-odb        loose objects + pack access
@@ -96,21 +98,27 @@ Dependency rules:
 
 ## Current implementation
 
-The local core implemented in this workspace covers:
+The local workflow implemented in this workspace covers:
 
-- `init`, `add`, `commit`, `status` and `log`;
+- `init`, `add`, `commit`, `status`, `log`, `diff`, `restore`, `checkout`,
+  `branch` and `switch`;
 - loose object writes and verified reads;
 - version-2 packfiles and indexes, including delta chains;
 - index versions 2 through 4 on input, version-2 writes (or version 3 when
   extended flags require it);
-- loose refs, packed refs, detached `HEAD`, compare-and-swap ref updates and
-  reflogs;
+- loose refs, packed refs, detached `HEAD`, compare-and-swap ref updates,
+  branch deletion and reflogs;
 - recursive tree building, commit parsing and committer-date history walks;
+- unified diffs, diffstats, safe worktree checkout and branch switching;
 - Git-compatible `.gitignore` matching through the `ignore` crate.
 
-## Non-goals for the first milestone
+See [the visual architecture guide](../architecture.md) for Mermaid diagrams of
+the system, crate graph, object model and workflows.
 
-Network transports, checkout, branch creation, merges, diff, tags creation,
-submodules, LFS, reftable, SHA-256 repositories, bare repositories, linked
-worktrees, `.gitattributes`, CRLF normalization, hooks and commit signing.
-These are explicit errors or documented gaps, not silent no-ops.
+## Non-goals for the current milestone
+
+Network transports, merges and conflict resolution, tags creation, reset,
+revert, cherry-pick, submodules, LFS, reftable, SHA-256 repositories, bare
+repositories, linked worktrees, `.gitattributes`, CRLF normalization, hooks and
+commit signing. These are explicit errors or documented gaps, not silent
+no-ops.
