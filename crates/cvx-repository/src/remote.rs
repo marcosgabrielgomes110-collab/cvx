@@ -814,8 +814,7 @@ mod tests {
     fn escapes_windows_paths_in_config_values() {
         let value = r"C:\repos\example";
         let text = format!("[remote \"origin\"]\n\turl = {}\n", config_value(value));
-        let config =
-            cvx_config::Config::parse_str(&text, "test").expect("config should parse");
+        let config = cvx_config::Config::parse_str(&text, "test").expect("config should parse");
         assert_eq!(config.get("remote.origin.url"), Some(value));
     }
 
@@ -823,8 +822,7 @@ mod tests {
     fn quotes_urls_with_spaces() {
         let value = "https://example.com/a b/repo.git";
         let text = format!("[remote \"origin\"]\n\turl = {}\n", config_value(value));
-        let config =
-            cvx_config::Config::parse_str(&text, "test").expect("config should parse");
+        let config = cvx_config::Config::parse_str(&text, "test").expect("config should parse");
         assert_eq!(config.get("remote.origin.url"), Some(value));
     }
 }
