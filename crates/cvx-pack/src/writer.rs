@@ -65,6 +65,7 @@ pub fn write_pack(
     let pack_path = directory.join(format!("{stem}.pack"));
     let index_path = directory.join(format!("{stem}.idx"));
     cvx_core::fs::write_atomic(&pack_path, &built.bytes, Some(0o444))?;
+    cvx_core::failpoint::hit("pack.before-index")?;
     cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
 
     Ok(PackWriteOutcome {

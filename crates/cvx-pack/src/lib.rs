@@ -10,6 +10,8 @@ mod delta;
 mod idx;
 mod ingest;
 mod pack;
+#[cfg(test)]
+mod proptests;
 mod writer;
 
 pub use delta::apply_delta;

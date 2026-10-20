@@ -9,6 +9,8 @@
 
 mod loader;
 mod parser;
+#[cfg(test)]
+mod proptests;
 
 pub use loader::{load_global, load_system};
 pub use parser::{Config, Entry};

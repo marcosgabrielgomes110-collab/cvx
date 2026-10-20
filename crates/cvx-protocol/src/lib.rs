@@ -7,6 +7,8 @@
 #![forbid(unsafe_code)]
 
 mod pkt;
+#[cfg(test)]
+mod proptests;
 mod v2;
 
 pub use pkt::{

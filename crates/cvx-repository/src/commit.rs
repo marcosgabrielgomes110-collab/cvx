@@ -129,6 +129,7 @@ impl Repository {
         let oid = self
             .objects()
             .write(ObjectKind::Commit, &commit.serialize())?;
+        cvx_core::failpoint::hit("commit.before-ref-update")?;
 
         let branch = self.update_head_for_commit(
             oid,

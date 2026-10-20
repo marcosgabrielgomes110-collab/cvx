@@ -14,5 +14,12 @@ cvx-index = { workspace = true }
 cvx-object = { workspace = true }
 similar = { workspace = true }
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "throughput"
+harness = false
+
 [lints]
 workspace = true

@@ -356,6 +356,7 @@ impl RefStore {
             file.sync_all()
                 .map_err(|error| Error::io(lock_path.display().to_string(), error))?;
             drop(file);
+            cvx_core::failpoint::hit("ref.before-publish")?;
             std::fs::rename(&lock_path, &ref_path)
                 .map_err(|error| Error::io(ref_path.display().to_string(), error))?;
             cvx_core::fs::sync_parent(&ref_path)

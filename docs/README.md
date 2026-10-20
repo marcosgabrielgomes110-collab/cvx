@@ -8,6 +8,7 @@ Start here:
 - [GitHub integration](github.md)
 - [Roadmap](roadmap.md)
 - [Benchmarks and reporting format](benchmarks.md)
+- [Hardening: fuzz tests, failpoints and recovery](hardening.md)
 
 Reference material:
 

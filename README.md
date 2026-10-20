@@ -10,13 +10,13 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: Phase 4 complete.** The local core, navigation, merge, HTTPS/SSH
-> transport and GitHub workflows are implemented, including OAuth device flow,
-> collaborators, review threads, required checks, milestones, GraphQL, and
-> release assets. Phase 5 focuses on release quality and hardening.
+> **Status: Phase 5 in progress.** The local core, merge, HTTPS/SSH transport
+> and GitHub workflows are implemented. Phase 5 hardening now includes
+> property-based parser fuzzing, crash failpoints and Criterion benchmarks.
+> SHA-256, `.gitattributes`/CRLF and release signing remain.
 >
-> This repository itself is versioned with CVX in `.cvx/` and published with
-> `cvx push`. Git remains only a compatibility test oracle.
+> CVX can commit and push this repository directly; Git remains the current
+> control directory and the compatibility test oracle.
 
 ## What works today
 
@@ -105,13 +105,16 @@ Implemented:
 - GitHub Actions check runs, required status checks and workflow-run listing;
 - labels, releases and release assets, including upload and deletion;
 - generic GraphQL queries with inline or file-based variables;
+- property-based fuzz tests for pack, index, object, config and protocol parsers;
+- crash failpoints for commit, index, ref and pack publication;
+- Criterion benchmarks for pack, index and diff throughput;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
 Not implemented yet: shallow fetch updates/unshallow, `--filter` for local
 paths, automatic pagination beyond the first 100 entries, SHA-256 repositories,
 submodules, LFS, hooks, commit signing, `.gitattributes`, CRLF normalization,
-fuzzing and full benchmark automation.
+large-repository benchmark automation and release signing.
 
 ## Design decisions
 
@@ -228,25 +231,17 @@ mode, including repositories packed by `git gc`.
 
 ## Benchmarks
 
-Illustrative reporting format — **not measured CVX results**:
+Criterion benchmarks cover pack write/ingest, index serialize/parse and diff
+rendering:
 
-```markdown
-# Read benchmark
-
-**Environment:** Arch Linux x86_64
-**Language:** Rust stable, release profile
-**Data:** 1,000,000 records
-
-| Operation | Time |
-|---|---:|
-| Sequential read | 120 ms |
-| Index lookup | 3 ms |
-
-> Values are illustrative. Run the benchmarks on your machine.
+```console
+$ cargo bench -p cvx-pack -p cvx-index -p cvx-diff
+$ cargo bench -p cvx-pack --bench throughput -- --quick
 ```
 
-The benchmark policy and planned scenarios are in
-[docs/benchmarks.md](docs/benchmarks.md).
+Reports are written to `target/criterion/`. Always include hardware, Rust
+version, build profile and data size when reporting results. The policy and
+scenario table are in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Documentation
 
@@ -259,6 +254,7 @@ The benchmark policy and planned scenarios are in
 - [Repository layout](docs/spec/repository-layout.md)
 - [Detailed design notes](docs/architecture/overview.md)
 - [Benchmarks](docs/benchmarks.md)
+- [Hardening and crash recovery](docs/hardening.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

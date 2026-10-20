@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod failpoint;
 pub mod fs;
 pub mod refname;
 

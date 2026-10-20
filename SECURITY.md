@@ -31,7 +31,8 @@ Security-sensitive areas include:
 - keychain and credential-file storage permissions and secret leakage;
 - GitHub API token handling, request authorization and destructive operations;
 - shallow boundaries and partial-clone lazy object fetching;
-- decompression, pack ingestion and delta-chain resource limits.
+- decompression, pack ingestion and delta-chain resource limits;
+- test-only failpoint injection (`CVX_FAILPOINT`) and crash recovery.
 
 ## Design commitments
 

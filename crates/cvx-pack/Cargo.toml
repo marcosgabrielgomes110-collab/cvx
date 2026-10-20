@@ -16,7 +16,13 @@ flate2 = { workspace = true }
 sha1 = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 tempfile = { workspace = true }
+proptest = { workspace = true }
+
+[[bench]]
+name = "throughput"
+harness = false
 
 [lints]
 workspace = true

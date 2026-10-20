@@ -11,6 +11,8 @@ mod commit;
 mod hash;
 mod id;
 mod kind;
+#[cfg(test)]
+mod proptests;
 mod signature;
 mod tag;
 mod tree;

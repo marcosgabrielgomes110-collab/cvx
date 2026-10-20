@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Phase 5 release quality is next._
+_Phase 5 hardening is in progress._
+
+### Added
+
+- Property-based fuzz tests for pack, index, object, config and protocol
+  parsers.
+- Crash failpoints for commit, index, ref and pack publication, with recovery
+  tests.
+- Criterion benchmarks for pack write/ingest, index serialize/parse and diff
+  rendering.
 
 ## [0.3.0] - 2026-10-19
 

@@ -61,6 +61,7 @@ impl IndexLock {
             .map_err(|error| Error::io(self.lock_path.display().to_string(), error))?;
         drop(file);
 
+        cvx_core::failpoint::hit("index.before-publish")?;
         std::fs::rename(&self.lock_path, &self.index_path)
             .map_err(|error| Error::io(self.index_path.display().to_string(), error))?;
         cvx_core::fs::sync_parent(&self.index_path)?;

@@ -11,7 +11,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
-| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Next |
+| 5 | Fuzzing, crash recovery, benchmarks, release hardening | In progress |
 
 ## Phase 2B — merge and history workflows
 
@@ -73,9 +73,17 @@ Known limitations:
 
 ## Phase 5 — release quality
 
-- fuzzing for pack, index, object and config parsers;
-- crash failpoints and recovery tests;
-- benchmarks on 10k/100k-file repositories;
+Implemented:
+
+- property-based fuzz tests for pack, index, object, config and protocol
+  parsers;
+- crash failpoints and recovery tests for commit, index, ref and pack
+  publication;
+- Criterion benchmarks for pack, index and diff throughput.
+
+Remaining:
+
+- large-repository benchmark automation on 10k/100k files;
 - SHA-256 repository support;
 - `.gitattributes` and line-ending normalization;
 - release signing and reproducible artifacts.

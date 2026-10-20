@@ -10,6 +10,8 @@
 mod entry;
 mod index;
 mod lock;
+#[cfg(test)]
+mod proptests;
 
 pub use entry::{
     IndexEntry, MODE_EXECUTABLE, MODE_FILE, MODE_GITLINK, MODE_SYMLINK, MODE_TREE, path_from_bytes,
