@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Phase 5 hardening is in progress._
+_Phase 5 hardening continues._
+
+## [0.3.1] - 2026-10-21
 
 ### Added
 
