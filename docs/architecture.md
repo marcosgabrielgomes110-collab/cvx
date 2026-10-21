@@ -133,7 +133,7 @@ flowchart TD
     Git -->|file| Linked["error: linked worktree unsupported"]
     OpenCvx --> Format{"format supported?"}
     OpenGit --> Format
-    Format -->|sha1, files refs| Ready(["repository ready"])
+    Format -->|sha1 or sha256, files refs| Ready(["repository ready"])
     Format -->|sha256, reftable, bare, partial| Unsupported["explicit unsupported error"]
 ```
 

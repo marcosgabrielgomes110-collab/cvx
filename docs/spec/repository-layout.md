@@ -68,6 +68,4 @@ The first milestone rejects:
 
 - bare repositories (`core.bare = true`);
 - linked worktrees and submodule checkouts (`.git` is a file);
-- reftable reference storage;
-- partial clone repositories;
-- SHA-256 repositories.
+- reftable reference storage.

@@ -9,7 +9,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | --- | --- | --- | --- |
 | `.cvx/` control directory | Yes | Yes | Git-compatible internals |
 | `.git/` control directory | Yes | Yes | Compatibility mode |
-| Loose objects (SHA-1) | Yes | Yes | Hash verified on read |
+| Loose objects (SHA-1/SHA-256) | Yes | Yes | Hash verified on read |
 | Pack v2/v3 | Yes | v2 | Writer emits complete objects, not deltas |
 | Pack index v2 | Yes | Yes | Version-1 indexes are rejected |
 | Delta chains (`ofs-delta`, `ref-delta`) | Yes | No | Depth and output size are bounded |
@@ -19,7 +19,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Index v2 | Yes | Yes | Default write format |
 | Index v3/v4 | Yes | No | Read path; writes v2, or v3 when extended flags require it |
 | Reflogs | Yes | Yes | Commits and branch switches |
-| SHA-256 repositories | No | No | Detected and rejected |
+| SHA-256 repositories | Yes | Yes | Local workflows, packs, index and clones; HTTPS/SSH not yet |
 | Reftable storage | No | No | Detected and rejected |
 | Bare repositories | No | No | Rejected during discovery |
 | Linked worktrees | No | No | Rejected during discovery |

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use cvx_core::{Error, Result};
 use cvx_index::{Index, IndexEntry, IndexLock, MODE_GITLINK, MODE_SYMLINK};
 use cvx_merge::{FileMerge, MergeLabels, conflict_markers, merge_file, merge_mode};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{ObjectId, ObjectKind, hash_object_with};
 use cvx_ref::Head;
 
 use crate::commit::IdentityRole;
@@ -215,7 +215,11 @@ impl Repository {
 
                     if merged.clean {
                         if let Some(mode) = mode {
-                            let oid = hash_object(ObjectKind::Blob, &merged.content);
+                            let oid = hash_object_with(
+                                self.hash_algorithm(),
+                                ObjectKind::Blob,
+                                &merged.content,
+                            );
                             self.write_clean(
                                 &mut index,
                                 &path,

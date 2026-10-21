@@ -61,6 +61,7 @@ pub struct Repository {
     work_tree: PathBuf,
     kind: RepositoryKind,
     objects: Rc<ObjectStore>,
+    algorithm: HashAlgorithm,
 }
 
 impl Repository {
@@ -143,12 +144,23 @@ impl Repository {
             RepositoryKind::Git
         };
 
-        let objects = Rc::new(ObjectStore::open(control_dir.join("objects"))?);
+        let config = Config::load_file(control_dir.join("config"))?;
+        let algorithm = config
+            .get("extensions.objectformat")
+            .map(HashAlgorithm::parse)
+            .transpose()
+            .map_err(|error| Error::unsupported(error.to_string()))?
+            .unwrap_or_default();
+        let objects = Rc::new(ObjectStore::open_with_algorithm(
+            control_dir.join("objects"),
+            algorithm,
+        )?);
         let repository = Self {
             control_dir,
             work_tree,
             kind,
             objects,
+            algorithm,
         };
         repository.validate_format()?;
         Ok(repository)
@@ -190,14 +202,8 @@ impl Repository {
     }
 
     /// Returns the object format declared by the repository.
-    pub fn hash_algorithm(&self) -> Result<HashAlgorithm> {
-        let config = self.config()?;
-        match config.get("extensions.objectformat") {
-            Some(format) => {
-                HashAlgorithm::parse(format).map_err(|error| Error::unsupported(error.to_string()))
-            }
-            None => Ok(HashAlgorithm::Sha1),
-        }
+    pub fn hash_algorithm(&self) -> HashAlgorithm {
+        self.algorithm
     }
 
     /// Returns the object database for this repository.
@@ -212,7 +218,10 @@ impl Repository {
 
     /// Reads the index, returning an empty index when it does not exist.
     pub fn read_index(&self) -> Result<Index> {
-        Ok(Index::read_from(&self.index_path())?.unwrap_or_default())
+        Ok(
+            Index::read_from_with_algorithm(&self.index_path(), self.algorithm)?
+                .unwrap_or_else(|| Index::new_with_algorithm(self.algorithm)),
+        )
     }
 
     /// Reads and verifies an object.
@@ -228,7 +237,9 @@ impl Repository {
                 };
                 let transport = NetworkTransport::open(&url)?;
                 let response = transport.fetch_full(&[oid], None, &[], Some("blob:none"))?;
-                for object in cvx_pack::ingest_pack(&response.pack)? {
+                for object in
+                    cvx_pack::ingest_pack_with_algorithm(&response.pack, self.hash_algorithm())?
+                {
                     self.objects().write(object.kind, &object.data)?;
                 }
                 self.objects().read(oid)
@@ -267,7 +278,7 @@ impl Repository {
                 object.kind
             )));
         }
-        Tree::parse(&object.data)
+        Tree::parse_with_algorithm(&object.data, self.algorithm)
     }
 
     /// Reads `HEAD`'s commit, if the current branch has one.
@@ -478,6 +489,7 @@ mod tests {
             directory: root.clone(),
             initial_branch: None,
             storage: InitStorage::Cvx,
+            object_format: cvx_object::HashAlgorithm::Sha1,
             quiet: true,
         })
         .expect("init");
@@ -490,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_sha256_repositories() {
+    fn opens_sha256_repositories() {
         let temp = tempfile::tempdir().expect("tempdir");
         let control = temp.path().join(".cvx");
         std::fs::create_dir_all(control.join("objects")).expect("mkdir");
@@ -500,8 +512,8 @@ mod tests {
         )
         .expect("write config");
 
-        let result = Repository::open(&control);
-        assert!(matches!(result, Err(Error::Unsupported { .. })));
+        let repository = Repository::open(&control).expect("open sha256");
+        assert_eq!(repository.hash_algorithm(), HashAlgorithm::Sha256);
     }
 
     #[test]

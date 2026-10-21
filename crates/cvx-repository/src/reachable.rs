@@ -28,7 +28,7 @@ impl Repository {
                     stack.extend(commit.parents);
                 }
                 ObjectKind::Tree => {
-                    let tree = Tree::parse(&object.data)?;
+                    let tree = Tree::parse_with_algorithm(&object.data, self.hash_algorithm())?;
                     for entry in tree.entries() {
                         if !entry.is_gitlink() {
                             stack.push(entry.oid);

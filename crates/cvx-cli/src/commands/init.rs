@@ -9,6 +9,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         directory: args.directory,
         initial_branch: args.initial_branch,
         storage: args.storage.into(),
+        object_format: args.object_format.into(),
         quiet: args.quiet,
     })?;
 

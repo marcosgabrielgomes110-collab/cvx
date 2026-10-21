@@ -10,10 +10,10 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: Phase 5 in progress.** The local core, merge, HTTPS/SSH transport
-> and GitHub workflows are implemented. Phase 5 hardening now includes
-> property-based parser fuzzing, crash failpoints and Criterion benchmarks.
-> SHA-256, `.gitattributes`/CRLF and release signing remain.
+> **Status: 0.4.0 release.** The local core, merge, HTTPS/SSH transport, GitHub
+> workflows and Phase 5 hardening are implemented, including property-based
+> fuzzing, crash failpoints, benchmarks, `.gitattributes`/CRLF and local
+> SHA-256 repositories. GPG release signing is supported when configured.
 >
 > CVX can commit and push this repository directly; Git remains the current
 > control directory and the compatibility test oracle.
@@ -109,13 +109,14 @@ Implemented:
 - crash failpoints for commit, index, ref and pack publication;
 - Criterion benchmarks for pack, index, diff and repository operations;
 - `.gitattributes` text/eol/binary handling with `core.autocrlf`;
+- SHA-256 repositories for local workflows, packs, index and clones;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
 Not implemented yet: shallow fetch updates/unshallow, `--filter` for local
-paths, automatic pagination beyond the first 100 entries, SHA-256 repositories,
-submodules, LFS, hooks, commit signing, working-tree encodings, diff/merge
-attribute drivers, and release signing.
+paths, automatic pagination beyond the first 100 entries, SHA-256 over
+HTTPS/SSH, submodules, LFS, hooks, commit signing, working-tree encodings,
+diff/merge attribute drivers, and fully reproducible cross-toolchain builds.
 
 ## Design decisions
 
@@ -130,7 +131,8 @@ attribute drivers, and release signing.
   primitive crates for SHA-1, zlib, text diffing and CLI parsing.
 - **Loose writes, packed reads.** CVX writes loose objects and reads loose
   objects and version-2/3 packfiles.
-- **SHA-1 first.** SHA-256 repositories are detected and rejected explicitly.
+- **SHA-1 default, SHA-256 opt-in.** New repositories use SHA-1 unless
+  `--object-format sha256` is requested; the two formats are never mixed.
 - **Unsupported means unsupported.** Features outside the current milestone fail
   with a clear error; they are never silently simulated.
 
@@ -200,7 +202,7 @@ mode, including repositories packed by `git gc`.
 
 | Command | Notes |
 | --- | --- |
-| `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--quiet` |
+| `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--object-format sha1\|sha256`, `--quiet` |
 | `cvx clone <URL> [DIR]` | Local, `file://`, `https://`, `ssh://`; `--branch`, `--storage`, `--depth`, `--filter` |
 | `cvx remote [list]` | `add <NAME> <URL>` |
 | `cvx fetch [REMOTE]` | Updates `refs/remotes/*` and tags |
@@ -285,7 +287,7 @@ use the file backend).
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
-| 5 | Fuzzing, crash recovery, benchmarks, release hardening | Next |
+| 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete |
 
 ## Contributing
 

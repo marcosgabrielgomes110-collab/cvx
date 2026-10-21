@@ -8,7 +8,7 @@ use cvx_ignore::WorktreeWalker;
 #[cfg(unix)]
 use cvx_index::MODE_EXECUTABLE;
 use cvx_index::{IndexEntry, MODE_FILE, MODE_SYMLINK, path_to_bytes};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{ObjectId, ObjectKind, hash_object_with};
 use cvx_ref::Head;
 
 use crate::repository::{Repository, RepositoryKind, TreeLeaf};
@@ -166,6 +166,7 @@ impl Repository {
         let filemode = self.filemode()?;
         let attributes = self.attributes()?;
         let autocrlf = self.autocrlf()?;
+        let algorithm = self.hash_algorithm();
 
         let index = self.read_index()?;
         let index_paths: BTreeSet<Vec<u8>> = index
@@ -232,7 +233,14 @@ impl Repository {
                 continue;
             }
 
-            match worktree_content(self.work_tree(), path, filemode, &attributes, autocrlf)? {
+            match worktree_content(
+                self.work_tree(),
+                path,
+                filemode,
+                &attributes,
+                autocrlf,
+                algorithm,
+            )? {
                 WorktreeContent::Missing => {
                     unstaged.insert(path.clone(), StatusKind::Deleted);
                 }
@@ -488,6 +496,7 @@ fn worktree_content(
     filemode: bool,
     attributes: &cvx_attributes::AttributeSet,
     autocrlf: cvx_attributes::AutoCrlf,
+    algorithm: cvx_object::HashAlgorithm,
 ) -> Result<WorktreeContent> {
     let components: Vec<&[u8]> = relative.split(|byte| *byte == b'/').collect();
     if components.is_empty() {
@@ -520,7 +529,7 @@ fn worktree_content(
         }
 
         return classify_metadata(
-            &current, &metadata, filemode, attributes, autocrlf, relative,
+            &current, &metadata, filemode, attributes, autocrlf, relative, algorithm,
         );
     }
 
@@ -534,6 +543,7 @@ fn classify_metadata(
     attributes: &cvx_attributes::AttributeSet,
     autocrlf: cvx_attributes::AutoCrlf,
     relative: &[u8],
+    algorithm: cvx_object::HashAlgorithm,
 ) -> Result<WorktreeContent> {
     let file_type = metadata.file_type();
 
@@ -542,7 +552,7 @@ fn classify_metadata(
         let target = path_to_bytes(&target)?;
         return Ok(WorktreeContent::File {
             mode: MODE_SYMLINK,
-            oid: hash_object(ObjectKind::Blob, &target),
+            oid: hash_object_with(algorithm, ObjectKind::Blob, &target),
         });
     }
 
@@ -556,7 +566,7 @@ fn classify_metadata(
     let mode = worktree_mode(metadata, filemode);
     Ok(WorktreeContent::File {
         mode,
-        oid: hash_object(ObjectKind::Blob, &content),
+        oid: hash_object_with(algorithm, ObjectKind::Blob, &content),
     })
 }
 

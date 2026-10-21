@@ -231,6 +231,7 @@ impl Repository {
             directory: options.directory.clone(),
             initial_branch: Some(branch.clone()),
             storage: options.storage,
+            object_format: source.hash_algorithm(),
             quiet: true,
         })?;
         let repository = match init {
@@ -248,7 +249,11 @@ impl Repository {
             .iter()
             .map(|(kind, data)| PackInput { kind: *kind, data })
             .collect();
-        cvx_pack::write_pack(repository.control_dir().join("objects/pack"), &inputs)?;
+        cvx_pack::write_pack_with_algorithm(
+            repository.control_dir().join("objects/pack"),
+            &inputs,
+            repository.hash_algorithm(),
+        )?;
 
         let repository = Repository::open(repository.control_dir())?;
         finish_clone(
@@ -313,14 +318,26 @@ impl Repository {
         wants.sort_unstable();
         wants.dedup();
 
+        let algorithm = heads
+            .values()
+            .next()
+            .map(ObjectId::algorithm)
+            .or_else(|| tags.values().next().map(ObjectId::algorithm))
+            .unwrap_or_default();
+        if algorithm != cvx_object::HashAlgorithm::Sha1 {
+            return Err(Error::unsupported(
+                "SHA-256 repositories over HTTPS or SSH (use a local path)",
+            ));
+        }
         let response =
             transport.fetch_full(&wants, options.depth, &[], options.filter.as_deref())?;
-        let objects = cvx_pack::ingest_pack(&response.pack)?;
+        let objects = cvx_pack::ingest_pack_with_algorithm(&response.pack, algorithm)?;
 
         let init = Repository::init(InitOptions {
             directory: options.directory.clone(),
             initial_branch: Some(branch.clone()),
             storage: options.storage,
+            object_format: algorithm,
             quiet: true,
         })?;
         let repository = match init {
@@ -357,6 +374,11 @@ impl Repository {
             return self.fetch_http(remote_name, &url);
         }
         let source = open_local_remote(&url)?;
+        if source.hash_algorithm() != self.hash_algorithm() {
+            return Err(Error::Message(
+                "cannot fetch between repositories with different object formats".to_owned(),
+            ));
+        }
 
         let heads = source.refs().list_refs("refs/heads")?;
         let tags = source.refs().list_refs("refs/tags")?;
@@ -432,6 +454,11 @@ impl Repository {
     fn fetch_http(&self, remote_name: &str, url: &str) -> Result<FetchOutcome> {
         let transport = NetworkTransport::open(url)?;
         let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
+        if refs.refs.iter().any(|reference| reference.oid.is_sha256()) {
+            return Err(Error::unsupported(
+                "SHA-256 repositories over HTTPS or SSH (use a local path)",
+            ));
+        }
 
         let mut heads = BTreeMap::new();
         let mut tags = BTreeMap::new();
@@ -456,7 +483,7 @@ impl Repository {
         let mut copied = 0;
         if !wants.is_empty() {
             let pack = transport.fetch(&wants)?;
-            for object in cvx_pack::ingest_pack(&pack)? {
+            for object in cvx_pack::ingest_pack_with_algorithm(&pack, self.hash_algorithm())? {
                 if !self.objects().contains(object.oid)? {
                     self.objects().write(object.kind, &object.data)?;
                     copied += 1;
@@ -547,6 +574,11 @@ impl Repository {
             return self.push_http(options, remote_name, &branch, tip, &url);
         }
         let remote = open_local_remote(&url)?;
+        if remote.hash_algorithm() != self.hash_algorithm() {
+            return Err(Error::Message(
+                "cannot push to a repository with a different object format".to_owned(),
+            ));
+        }
         let old = remote.refs().read_ref(&reference)?;
 
         let objects = self.reachable_objects(&[tip])?;
@@ -604,6 +636,9 @@ impl Repository {
         tip: ObjectId,
         url: &str,
     ) -> Result<PushOutcome> {
+        if self.hash_algorithm() != cvx_object::HashAlgorithm::Sha1 {
+            return Err(Error::unsupported("SHA-256 pushes over HTTPS or SSH"));
+        }
         let transport = NetworkTransport::open(url)?;
         let advertisement = transport.discover_receive_pack()?;
         let reference = format!("refs/heads/{branch}");
@@ -634,7 +669,7 @@ impl Repository {
             .iter()
             .map(|(kind, data)| PackInput { kind: *kind, data })
             .collect();
-        let pack = cvx_pack::encode_pack(&inputs)?;
+        let pack = cvx_pack::encode_pack_with_algorithm(&inputs, self.hash_algorithm())?;
 
         transport.push(
             &[PushCommand {

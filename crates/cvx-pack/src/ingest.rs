@@ -2,13 +2,11 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use cvx_core::{Error, Result};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{HashAlgorithm, ObjectId, ObjectKind, hash_object_with};
 use flate2::read::ZlibDecoder;
-use sha1::{Digest, Sha1};
 
 use crate::delta::apply_delta;
 
-const CHECKSUM_LEN: usize = 20;
 const MAX_OBJECT_SIZE: u64 = 1024 * 1024 * 1024;
 
 /// An object decoded from a received packfile.
@@ -27,11 +25,20 @@ pub struct IngestedObject {
 /// The pack trailer is verified. Delta objects are resolved against earlier
 /// objects in the same pack; thin packs with external bases are rejected.
 pub fn ingest_pack(bytes: &[u8]) -> Result<Vec<IngestedObject>> {
-    if bytes.len() < 12 + CHECKSUM_LEN {
+    ingest_pack_with_algorithm(bytes, HashAlgorithm::Sha1)
+}
+
+/// Decodes a received pack using a specific repository object format.
+pub fn ingest_pack_with_algorithm(
+    bytes: &[u8],
+    algorithm: HashAlgorithm,
+) -> Result<Vec<IngestedObject>> {
+    let checksum_len = algorithm.oid_len();
+    if bytes.len() < 12 + checksum_len {
         return Err(Error::corrupt("received pack is too short"));
     }
-    let payload_end = bytes.len() - CHECKSUM_LEN;
-    let expected: [u8; 20] = Sha1::digest(&bytes[..payload_end]).into();
+    let payload_end = bytes.len() - checksum_len;
+    let expected = crate::checksum::checksum(algorithm, &bytes[..payload_end]);
     if expected.as_slice() != &bytes[payload_end..] {
         return Err(Error::corrupt("received pack checksum does not match"));
     }
@@ -88,7 +95,7 @@ pub fn ingest_pack(bytes: &[u8]) -> Result<Vec<IngestedObject>> {
             }
             7 => {
                 let base_end = position
-                    .checked_add(20)
+                    .checked_add(algorithm.oid_len())
                     .ok_or_else(|| Error::corrupt("received pack ref delta is truncated"))?;
                 if base_end > payload_end {
                     return Err(Error::corrupt("received pack ref delta is truncated"));
@@ -123,7 +130,7 @@ pub fn ingest_pack(bytes: &[u8]) -> Result<Vec<IngestedObject>> {
             return Err(Error::corrupt("received object exceeds the size limit"));
         }
 
-        let oid = hash_object(kind, &data);
+        let oid = hash_object_with(algorithm, kind, &data);
         let index = objects.len();
         objects.push(IngestedObject { oid, kind, data });
         by_offset.insert(offset, index);

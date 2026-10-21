@@ -1,6 +1,6 @@
 use cvx_core::{Error, Result};
 
-use crate::ObjectId;
+use crate::{HashAlgorithm, ObjectId};
 
 /// Mode for a directory tree entry.
 pub const MODE_TREE: u32 = 0o040_000;
@@ -68,8 +68,13 @@ impl Tree {
         &self.entries
     }
 
-    /// Parses tree object content.
+    /// Parses SHA-1 tree object content.
     pub fn parse(bytes: &[u8]) -> Result<Self> {
+        Self::parse_with_algorithm(bytes, HashAlgorithm::Sha1)
+    }
+
+    /// Parses tree object content using the repository hash algorithm.
+    pub fn parse_with_algorithm(bytes: &[u8], algorithm: HashAlgorithm) -> Result<Self> {
         let mut entries = Vec::new();
         let mut position = 0;
 
@@ -91,7 +96,7 @@ impl Tree {
             validate_name(&name)?;
 
             let oid_start = name_end + 1;
-            let oid_end = oid_start + 20;
+            let oid_end = oid_start + algorithm.oid_len();
             if oid_end > bytes.len() {
                 return Err(Error::corrupt("tree entry is missing an object id"));
             }
@@ -105,8 +110,13 @@ impl Tree {
         Ok(Self { entries })
     }
 
-    /// Serializes the tree, sorting entries into Git order.
+    /// Serializes the tree using SHA-1 identifiers.
     pub fn serialize(&self) -> Vec<u8> {
+        self.serialize_with_algorithm(HashAlgorithm::Sha1)
+    }
+
+    /// Serializes the tree using the repository hash algorithm.
+    pub fn serialize_with_algorithm(&self, _algorithm: HashAlgorithm) -> Vec<u8> {
         let mut entries = self.entries.clone();
         entries.sort_by_key(tree_key);
 

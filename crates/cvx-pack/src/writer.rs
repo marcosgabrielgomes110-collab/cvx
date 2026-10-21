@@ -3,15 +3,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{HashAlgorithm, ObjectId, ObjectKind, hash_object_with};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use sha1::{Digest, Sha1};
 
 const PACK_VERSION: u32 = 2;
 const IDX_MAGIC: &[u8; 4] = b"\xfftOc";
 const IDX_VERSION: u32 = 2;
-const CHECKSUM_LEN: usize = 20;
 const LARGE_OFFSET_FLAG: u32 = 0x8000_0000;
 
 /// One object to include in a packfile.
@@ -56,11 +54,20 @@ pub fn write_pack(
     directory: impl AsRef<Path>,
     inputs: &[PackInput<'_>],
 ) -> Result<PackWriteOutcome> {
+    write_pack_with_algorithm(directory, inputs, HashAlgorithm::Sha1)
+}
+
+/// Writes a pack using a specific repository object format.
+pub fn write_pack_with_algorithm(
+    directory: impl AsRef<Path>,
+    inputs: &[PackInput<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<PackWriteOutcome> {
     let directory = directory.as_ref();
     cvx_core::fs::ensure_dir(directory)?;
 
-    let built = build_pack(inputs)?;
-    let index = build_index(&built.index_entries, built.checksum_bytes);
+    let built = build_pack(inputs, algorithm)?;
+    let index = build_index(&built.index_entries, &built.checksum_bytes, algorithm);
     let stem = format!("pack-{}", built.checksum.to_hex());
     let pack_path = directory.join(format!("{stem}.pack"));
     let index_path = directory.join(format!("{stem}.idx"));
@@ -78,21 +85,29 @@ pub fn write_pack(
 
 /// Builds a version-2 packfile in memory, without writing an index.
 pub fn encode_pack(inputs: &[PackInput<'_>]) -> Result<Vec<u8>> {
-    Ok(build_pack(inputs)?.bytes)
+    encode_pack_with_algorithm(inputs, HashAlgorithm::Sha1)
+}
+
+/// Builds a pack in memory using a specific repository object format.
+pub fn encode_pack_with_algorithm(
+    inputs: &[PackInput<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<Vec<u8>> {
+    Ok(build_pack(inputs, algorithm)?.bytes)
 }
 
 struct BuiltPack {
     bytes: Vec<u8>,
     checksum: ObjectId,
-    checksum_bytes: [u8; CHECKSUM_LEN],
+    checksum_bytes: Vec<u8>,
     objects: Vec<PackedObject>,
     index_entries: Vec<(ObjectId, u32, u64)>,
 }
 
-fn build_pack(inputs: &[PackInput<'_>]) -> Result<BuiltPack> {
+fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<BuiltPack> {
     let mut objects: BTreeMap<ObjectId, (ObjectKind, &[u8])> = BTreeMap::new();
     for input in inputs {
-        let oid = hash_object(input.kind, input.data);
+        let oid = hash_object_with(algorithm, input.kind, input.data);
         objects.entry(oid).or_insert((input.kind, input.data));
     }
 
@@ -131,8 +146,9 @@ fn build_pack(inputs: &[PackInput<'_>]) -> Result<BuiltPack> {
         index_entries.push((*oid, crc, offset));
     }
 
-    let checksum_bytes: [u8; CHECKSUM_LEN] = Sha1::digest(&pack).into();
-    let checksum = ObjectId::from_bytes(checksum_bytes);
+    let checksum_bytes = crate::checksum::checksum(algorithm, &pack);
+    let checksum = ObjectId::from_slice(&checksum_bytes)
+        .map_err(|error| Error::corrupt(format!("invalid pack checksum: {error}")))?;
     pack.extend_from_slice(&checksum_bytes);
 
     Ok(BuiltPack {
@@ -172,7 +188,11 @@ fn object_header(kind: ObjectKind, size: u64) -> Result<Vec<u8>> {
     Ok(output)
 }
 
-fn build_index(entries: &[(ObjectId, u32, u64)], pack_checksum: [u8; 20]) -> Vec<u8> {
+fn build_index(
+    entries: &[(ObjectId, u32, u64)],
+    pack_checksum: &[u8],
+    algorithm: HashAlgorithm,
+) -> Vec<u8> {
     let mut output = Vec::new();
     output.extend_from_slice(IDX_MAGIC);
     output.extend_from_slice(&IDX_VERSION.to_be_bytes());
@@ -208,8 +228,8 @@ fn build_index(entries: &[(ObjectId, u32, u64)], pack_checksum: [u8; 20]) -> Vec
         output.extend_from_slice(&offset.to_be_bytes());
     }
 
-    output.extend_from_slice(&pack_checksum);
-    let index_checksum: [u8; CHECKSUM_LEN] = Sha1::digest(&output).into();
+    output.extend_from_slice(pack_checksum);
+    let index_checksum = crate::checksum::checksum(algorithm, &output);
     output.extend_from_slice(&index_checksum);
     output
 }
@@ -289,6 +309,44 @@ mod tests {
         for object in &outcome.objects {
             let output = git(&["cat-file", "-p", &object.oid.to_hex()]);
             assert!(!output.stdout.is_empty());
+        }
+    }
+
+    #[test]
+    fn writes_and_reads_sha256_pack() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let inputs = [
+            PackInput {
+                kind: ObjectKind::Blob,
+                data: b"hello\n",
+            },
+            PackInput {
+                kind: ObjectKind::Blob,
+                data: b"world\n",
+            },
+        ];
+        let outcome =
+            write_pack_with_algorithm(temp.path(), &inputs, cvx_object::HashAlgorithm::Sha256)
+                .expect("write");
+        assert!(outcome.objects.iter().all(|object| object.oid.is_sha256()));
+        let pack =
+            Pack::open_with_algorithm(&outcome.index_path, cvx_object::HashAlgorithm::Sha256)
+                .expect("open");
+        for object in &outcome.objects {
+            assert_eq!(
+                pack.read(object.oid).expect("read").data,
+                inputs
+                    .iter()
+                    .find(|input| {
+                        cvx_object::hash_object_with(
+                            cvx_object::HashAlgorithm::Sha256,
+                            input.kind,
+                            input.data,
+                        ) == object.oid
+                    })
+                    .expect("input")
+                    .data
+            );
         }
     }
 

@@ -27,7 +27,7 @@ mod worktree_ops;
 pub use add::{AddOptions, AddOutcome};
 pub use branch::BranchInfo;
 pub use commit::{CommitOptions, CommitOutcome};
-pub use cvx_object::{ObjectId, Signature};
+pub use cvx_object::{HashAlgorithm, ObjectId, Signature};
 pub use cvx_ref::Head;
 pub use cvx_revision::LogEntry;
 pub use diff::DiffOptions;

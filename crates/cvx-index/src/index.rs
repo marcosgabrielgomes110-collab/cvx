@@ -1,19 +1,20 @@
 use std::path::Path;
 
 use cvx_core::{Error, Result};
-use cvx_object::ObjectId;
-use sha1::{Digest, Sha1};
+use cvx_object::{HashAlgorithm, ObjectId};
+use sha1::Sha1;
+use sha2::Sha256;
 
 use crate::entry::{IndexEntry, validate_path};
 
 const MAGIC: &[u8; 4] = b"DIRC";
-const CHECKSUM_LEN: usize = 20;
 
 /// Parsed Git index (staging area).
 #[derive(Debug, Clone)]
 pub struct Index {
     version: u32,
     entries: Vec<IndexEntry>,
+    algorithm: HashAlgorithm,
 }
 
 impl Default for Index {
@@ -25,10 +26,21 @@ impl Default for Index {
 impl Index {
     /// Creates an empty version-2 index.
     pub fn new() -> Self {
+        Self::new_with_algorithm(HashAlgorithm::Sha1)
+    }
+
+    /// Creates an empty version-2 index for a specific object format.
+    pub fn new_with_algorithm(algorithm: HashAlgorithm) -> Self {
         Self {
             version: 2,
             entries: Vec::new(),
+            algorithm,
         }
+    }
+
+    /// Returns the object format used by this index.
+    pub fn algorithm(&self) -> HashAlgorithm {
+        self.algorithm
     }
 
     /// Returns the index format version.
@@ -115,12 +127,17 @@ impl Index {
 
     /// Reads an index file, returning `None` when it does not exist.
     pub fn read_from(path: &Path) -> Result<Option<Self>> {
+        Self::read_from_with_algorithm(path, HashAlgorithm::Sha1)
+    }
+
+    /// Reads an index using a specific object format.
+    pub fn read_from_with_algorithm(path: &Path, algorithm: HashAlgorithm) -> Result<Option<Self>> {
         let bytes = match std::fs::read(path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(Error::io(path.display().to_string(), error)),
         };
-        Self::parse(&bytes).map(Some)
+        Self::parse_with_algorithm(&bytes, algorithm).map(Some)
     }
 
     /// Writes the index atomically.
@@ -131,12 +148,18 @@ impl Index {
 
     /// Parses a complete index file.
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() < 12 + CHECKSUM_LEN {
+        Self::parse_with_algorithm(bytes, HashAlgorithm::Sha1)
+    }
+
+    /// Parses an index using a specific object format.
+    pub fn parse_with_algorithm(bytes: &[u8], algorithm: HashAlgorithm) -> Result<Self> {
+        let checksum_len = algorithm.oid_len();
+        if bytes.len() < 12 + checksum_len {
             return Err(Error::corrupt("index file is too short"));
         }
 
-        let payload_len = bytes.len() - CHECKSUM_LEN;
-        let expected: [u8; 20] = Sha1::digest(&bytes[..payload_len]).into();
+        let payload_len = bytes.len() - checksum_len;
+        let expected = index_checksum(algorithm, &bytes[..payload_len]);
         if expected.as_slice() != &bytes[payload_len..] {
             return Err(Error::corrupt("index checksum does not match"));
         }
@@ -172,7 +195,7 @@ impl Index {
             let uid = reader.u32()?;
             let gid = reader.u32()?;
             let size = reader.u32()?;
-            let oid = ObjectId::from_slice(reader.take(20)?).map_err(|error| {
+            let oid = ObjectId::from_slice(reader.take(algorithm.oid_len())?).map_err(|error| {
                 Error::corrupt(format!("index contains an invalid object id: {error}"))
             })?;
             let flags = reader.u16()?;
@@ -261,7 +284,11 @@ impl Index {
 
         validate_sorted(&entries)?;
 
-        Ok(Self { version, entries })
+        Ok(Self {
+            version,
+            entries,
+            algorithm,
+        })
     }
 
     /// Serializes the index, writing version 2 or 3 depending on entry flags.
@@ -289,6 +316,11 @@ impl Index {
             validate_path(&entry.path)?;
             if entry.stage > 3 {
                 return Err(Error::corrupt("index entry has an invalid merge stage"));
+            }
+            if entry.oid.len() != self.algorithm.oid_len() {
+                return Err(Error::corrupt(
+                    "index entry object id width does not match the repository format",
+                ));
             }
 
             let start = output.len();
@@ -330,9 +362,22 @@ impl Index {
             output.resize(output.len() + padding, 0);
         }
 
-        let checksum: [u8; 20] = Sha1::digest(&output).into();
+        let checksum = index_checksum(self.algorithm, &output);
         output.extend_from_slice(&checksum);
         Ok(output)
+    }
+}
+
+fn index_checksum(algorithm: HashAlgorithm, bytes: &[u8]) -> Vec<u8> {
+    match algorithm {
+        HashAlgorithm::Sha1 => {
+            use sha1::Digest;
+            Sha1::digest(bytes).to_vec()
+        }
+        HashAlgorithm::Sha256 => {
+            use sha2::Digest;
+            Sha256::digest(bytes).to_vec()
+        }
     }
 }
 
@@ -428,6 +473,7 @@ impl<'a> Reader<'a> {
 mod tests {
     use super::*;
     use crate::entry::{MODE_EXECUTABLE, MODE_FILE};
+    use sha1::Digest;
 
     fn oid(value: u8) -> ObjectId {
         ObjectId::from_bytes([value; 20])
@@ -470,6 +516,21 @@ mod tests {
     }
 
     #[test]
+    fn roundtrips_sha256_index() {
+        let oid = ObjectId::from_sha256_bytes([0x55; 32]);
+        let mut index = Index::new_with_algorithm(cvx_object::HashAlgorithm::Sha256);
+        index
+            .insert(IndexEntry::new(b"file.txt".to_vec(), oid, MODE_FILE))
+            .expect("insert");
+        let bytes = index.serialize().expect("serialize");
+        let parsed =
+            Index::parse_with_algorithm(&bytes, cvx_object::HashAlgorithm::Sha256).expect("parse");
+        assert_eq!(parsed.algorithm(), cvx_object::HashAlgorithm::Sha256);
+        assert_eq!(parsed.get(b"file.txt").expect("entry").oid, oid);
+        assert_eq!(parsed.get(b"file.txt").expect("entry").oid.len(), 32);
+    }
+
+    #[test]
     fn preserves_stage_and_extended_flags() {
         let mut entry = IndexEntry::new(b"conflicted".to_vec(), oid(0x33), MODE_FILE);
         entry.stage = 2;
@@ -499,7 +560,7 @@ mod tests {
     fn rejects_required_extensions() {
         let index = Index::new();
         let mut bytes = index.serialize().expect("serialize");
-        bytes.truncate(bytes.len() - CHECKSUM_LEN);
+        bytes.truncate(bytes.len() - 20);
 
         bytes.extend_from_slice(b"link");
         bytes.extend_from_slice(&0u32.to_be_bytes());

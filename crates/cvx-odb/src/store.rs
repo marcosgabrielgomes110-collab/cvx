@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
-use cvx_object::{ObjectId, ObjectKind};
+use cvx_object::{HashAlgorithm, ObjectId, ObjectKind};
 use cvx_pack::Pack;
 
 use crate::loose::{LooseStore, StoredObject};
@@ -12,15 +12,33 @@ use crate::loose::{LooseStore, StoredObject};
 pub struct ObjectStore {
     loose: LooseStore,
     packs: Vec<Pack>,
+    algorithm: HashAlgorithm,
 }
 
 impl ObjectStore {
     /// Opens the object database under an `objects/` directory.
     pub fn open(objects_dir: impl Into<PathBuf>) -> Result<Self> {
+        Self::open_with_algorithm(objects_dir, HashAlgorithm::Sha1)
+    }
+
+    /// Opens the store using a specific object format.
+    pub fn open_with_algorithm(
+        objects_dir: impl Into<PathBuf>,
+        algorithm: HashAlgorithm,
+    ) -> Result<Self> {
         let objects_dir = objects_dir.into();
-        let loose = LooseStore::new(&objects_dir);
-        let packs = open_packs(&objects_dir.join("pack"))?;
-        Ok(Self { loose, packs })
+        let loose = LooseStore::new_with_algorithm(&objects_dir, algorithm);
+        let packs = open_packs(&objects_dir.join("pack"), algorithm)?;
+        Ok(Self {
+            loose,
+            packs,
+            algorithm,
+        })
+    }
+
+    /// Returns the object format of this store.
+    pub fn algorithm(&self) -> HashAlgorithm {
+        self.algorithm
     }
 
     /// Writes a loose object.
@@ -106,7 +124,10 @@ impl ObjectStore {
                 let Some(name) = file.file_name().to_str().map(str::to_owned) else {
                     continue;
                 };
-                if name.len() != 38 || !name.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                let expected_name_len = self.algorithm.hex_len() - 2;
+                if name.len() != expected_name_len
+                    || !name.bytes().all(|byte| byte.is_ascii_hexdigit())
+                {
                     continue;
                 }
                 if let Ok(oid) = ObjectId::from_hex(&format!("{directory}{name}")) {
@@ -125,7 +146,7 @@ impl ObjectStore {
     }
 }
 
-fn open_packs(pack_dir: &Path) -> Result<Vec<Pack>> {
+fn open_packs(pack_dir: &Path, algorithm: HashAlgorithm) -> Result<Vec<Pack>> {
     let entries = match std::fs::read_dir(pack_dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -144,7 +165,7 @@ fn open_packs(pack_dir: &Path) -> Result<Vec<Pack>> {
 
     let mut packs = Vec::with_capacity(paths.len());
     for path in paths {
-        packs.push(Pack::open(&path)?);
+        packs.push(Pack::open_with_algorithm(&path, algorithm)?);
     }
     Ok(packs)
 }

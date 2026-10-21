@@ -17,4 +17,11 @@ if [ "$found" -eq 0 ]; then
     exit 1
 fi
 
+if command -v gpg >/dev/null 2>&1; then
+    for signature in *.asc; do
+        [ -f "$signature" ] || continue
+        gpg --verify "$signature" "${signature%.asc}"
+    done
+fi
+
 echo "all release checksums verified in $directory"

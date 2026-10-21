@@ -63,8 +63,24 @@ CRLF tests and `.gitattributes` integration live in `cvx-attributes` and
 - `core.autocrlf=true`, `input` and `false`;
 - normalization on add, status, diff, checkout, restore and merge.
 
+## SHA-256
+
+`cvx init --object-format sha256` creates a SHA-256 repository. Loose objects,
+packs, pack indexes, the index file, refs, commits, tags and local clones use
+the 32-byte identifier width. Git accepts these repositories directly
+(`git --git-dir=.cvx fsck --strict`).
+
+SHA-256 over HTTPS/SSH and mixed-format transfers are rejected explicitly.
+
+## Release verification and signing
+
+Release workflows verify every checksum before publishing. When the
+`RELEASE_SIGNING_KEY` secret is configured, archives are detached-signed with
+GPG and the `.asc` files are published alongside the checksums.
+`scripts/verify-release.sh` verifies checksums and any available signatures.
+
 ## Remaining hardening
 
-- SHA-256 object format;
-- release signing and fully reproducible artifacts;
+- SHA-256 over HTTPS/SSH;
+- fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.

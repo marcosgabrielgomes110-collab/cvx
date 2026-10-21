@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 cvx-core = { workspace = true }
 sha1 = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

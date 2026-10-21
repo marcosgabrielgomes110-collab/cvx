@@ -97,6 +97,10 @@ pub struct InitArgs {
     #[arg(long, value_enum, default_value = "cvx", value_name = "STORAGE")]
     pub storage: StorageArg,
 
+    /// Object hash format for a new repository.
+    #[arg(long, value_enum, default_value = "sha1", value_name = "FORMAT")]
+    pub object_format: ObjectFormatArg,
+
     /// Suppress the summary.
     #[arg(short, long)]
     pub quiet: bool,
@@ -1023,6 +1027,24 @@ impl From<StorageArg> for InitStorage {
         match value {
             StorageArg::Cvx => Self::Cvx,
             StorageArg::Git => Self::Git,
+        }
+    }
+}
+
+/// Object formats exposed on the command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ObjectFormatArg {
+    /// SHA-1 object identifiers.
+    Sha1,
+    /// SHA-256 object identifiers.
+    Sha256,
+}
+
+impl From<ObjectFormatArg> for cvx_repository::HashAlgorithm {
+    fn from(value: ObjectFormatArg) -> Self {
+        match value {
+            ObjectFormatArg::Sha1 => Self::Sha1,
+            ObjectFormatArg::Sha256 => Self::Sha256,
         }
     }
 }

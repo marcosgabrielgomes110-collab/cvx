@@ -18,8 +18,8 @@ mod tag;
 mod tree;
 
 pub use commit::Commit;
-pub use hash::{HashAlgorithm, UnsupportedHashAlgorithm, hash_object};
-pub use id::{ObjectId, ObjectIdError, SHA1_BYTES, SHA1_HEX_LEN};
+pub use hash::{HashAlgorithm, UnsupportedHashAlgorithm, hash_object, hash_object_with};
+pub use id::{ObjectId, ObjectIdError, SHA1_BYTES, SHA1_HEX_LEN, SHA256_BYTES, SHA256_HEX_LEN};
 pub use kind::ObjectKind;
 pub use signature::{Signature, parse_timezone};
 pub use tag::Tag;

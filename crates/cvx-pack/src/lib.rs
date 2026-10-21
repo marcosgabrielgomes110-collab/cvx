@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+mod checksum;
 mod delta;
 mod idx;
 mod ingest;
@@ -15,6 +16,9 @@ mod proptests;
 mod writer;
 
 pub use delta::apply_delta;
-pub use ingest::{IngestedObject, ingest_pack};
+pub use ingest::{IngestedObject, ingest_pack, ingest_pack_with_algorithm};
 pub use pack::{Pack, PackObject};
-pub use writer::{PackInput, PackWriteOutcome, PackedObject, encode_pack, write_pack};
+pub use writer::{
+    PackInput, PackWriteOutcome, PackedObject, encode_pack, encode_pack_with_algorithm, write_pack,
+    write_pack_with_algorithm,
+};

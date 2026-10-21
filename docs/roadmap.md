@@ -11,7 +11,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 2B | Merge, conflicts, tags creation, rename detection | Complete |
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
-| 5 | Fuzzing, crash recovery, benchmarks, release hardening | In progress |
+| 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete — v0.4.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -83,13 +83,14 @@ Implemented:
   including an opt-in 100k-file scenario;
 - `.gitattributes` text/eol/binary matching with nested files;
 - CRLF normalization for `core.autocrlf=true`, `input` and `false`;
-- checksum verification and deterministic timestamp configuration in the
-  release workflow.
+- local SHA-256 repositories: loose objects, packs, index, refs and clones;
+- checksum verification, deterministic timestamps and optional GPG signing in
+  the release workflow.
 
 Remaining:
 
-- SHA-256 repository support;
-- release signing and fully reproducible artifacts;
+- SHA-256 over HTTPS/SSH;
+- fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.
 
 ## Definition of done

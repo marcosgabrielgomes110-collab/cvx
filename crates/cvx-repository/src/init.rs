@@ -38,6 +38,8 @@ pub struct InitOptions {
     pub initial_branch: Option<String>,
     /// Control-directory convention.
     pub storage: InitStorage,
+    /// Object format for new repositories.
+    pub object_format: cvx_object::HashAlgorithm,
     /// Suppress the human-readable summary.
     pub quiet: bool,
 }
@@ -48,6 +50,7 @@ impl Default for InitOptions {
             directory: PathBuf::from("."),
             initial_branch: None,
             storage: InitStorage::Cvx,
+            object_format: cvx_object::HashAlgorithm::Sha1,
             quiet: false,
         }
     }
@@ -145,7 +148,12 @@ impl Repository {
             } else {
                 Some(resolve_initial_branch(options.initial_branch.as_deref())?)
             };
-            initialize_layout(&control_dir, options.storage, branch.as_deref())?;
+            initialize_layout(
+                &control_dir,
+                options.storage,
+                options.object_format,
+                branch.as_deref(),
+            )?;
             return Ok(InitOutcome::Reinitialized(Repository::open(&control_dir)?));
         }
 
@@ -154,7 +162,12 @@ impl Repository {
             .prefix(".cvx-init-")
             .tempdir_in(&target)
             .path_context(&target)?;
-        initialize_layout(temporary.path(), options.storage, Some(&branch))?;
+        initialize_layout(
+            temporary.path(),
+            options.storage,
+            options.object_format,
+            Some(&branch),
+        )?;
 
         let temporary_path = temporary.keep();
         if let Err(error) = std::fs::rename(&temporary_path, &control_dir) {
@@ -183,7 +196,12 @@ fn resolve_initial_branch(explicit: Option<&str>) -> Result<String> {
     Ok(branch)
 }
 
-fn initialize_layout(control_dir: &Path, storage: InitStorage, branch: Option<&str>) -> Result<()> {
+fn initialize_layout(
+    control_dir: &Path,
+    storage: InitStorage,
+    object_format: cvx_object::HashAlgorithm,
+    branch: Option<&str>,
+) -> Result<()> {
     for directory in [
         "branches",
         "hooks",
@@ -208,7 +226,7 @@ fn initialize_layout(control_dir: &Path, storage: InitStorage, branch: Option<&s
     }
     write_if_missing(
         &control_dir.join("config"),
-        config_contents(filemode, ignorecase).as_bytes(),
+        config_contents(filemode, ignorecase, object_format).as_bytes(),
         0o644,
     )?;
     write_if_missing(
@@ -244,14 +262,25 @@ fn write_if_missing(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
     fs::write_atomic(path, contents, Some(mode))
 }
 
-fn config_contents(filemode: bool, ignorecase: bool) -> String {
+fn config_contents(
+    filemode: bool,
+    ignorecase: bool,
+    object_format: cvx_object::HashAlgorithm,
+) -> String {
     let mut config = String::from("[core]\n");
-    config.push_str("\trepositoryformatversion = 0\n");
+    config.push_str(&format!(
+        "\trepositoryformatversion = {}\n",
+        u8::from(object_format == cvx_object::HashAlgorithm::Sha256)
+    ));
     config.push_str(&format!("\tfilemode = {filemode}\n"));
     config.push_str("\tbare = false\n");
     config.push_str("\tlogallrefupdates = true\n");
     if ignorecase {
         config.push_str("\tignorecase = true\n");
+    }
+    if object_format != cvx_object::HashAlgorithm::Sha1 {
+        config.push_str("[extensions]\n");
+        config.push_str(&format!("\tobjectformat = {}\n", object_format.name()));
     }
     config
 }
@@ -329,6 +358,7 @@ mod tests {
             directory: temp.path().to_path_buf(),
             initial_branch: Some("trunk".to_owned()),
             storage: InitStorage::Cvx,
+            object_format: cvx_object::HashAlgorithm::Sha1,
             quiet: true,
         })
         .expect("init");
@@ -359,6 +389,7 @@ mod tests {
             directory: temp.path().to_path_buf(),
             initial_branch: Some("main".to_owned()),
             storage: InitStorage::Cvx,
+            object_format: cvx_object::HashAlgorithm::Sha1,
             quiet: true,
         };
         Repository::init(options.clone()).expect("first init");

@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 use cvx_core::{Error, IoResultExt, Result};
 use cvx_diff::{DiffFile, DiffOptions as RenderOptions, DiffSide, render};
 use cvx_index::path_to_bytes;
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{ObjectId, ObjectKind, hash_object_with};
 
 use crate::repository::Repository;
 use crate::worktree_ops::{WorktreeContent, read_content};
@@ -183,7 +183,7 @@ impl Repository {
                     let attributes =
                         cvx_attributes::effective_attributes(&attributes.for_path(path), autocrlf);
                     let content = attributes.to_index_content(&content);
-                    let oid = hash_object(ObjectKind::Blob, &content);
+                    let oid = hash_object_with(self.hash_algorithm(), ObjectKind::Blob, &content);
                     snapshot.insert(
                         path.clone(),
                         SnapshotEntry {

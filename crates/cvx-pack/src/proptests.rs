@@ -15,11 +15,13 @@ proptest! {
 
     #[test]
     fn index_parser_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..4096)) {
-        let _ = PackIndex::parse(bytes);
+        let _ = PackIndex::parse(bytes.clone(), cvx_object::HashAlgorithm::Sha1);
+        let _ = PackIndex::parse(bytes, cvx_object::HashAlgorithm::Sha256);
     }
 
     #[test]
     fn pack_ingest_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..4096)) {
         let _ = ingest_pack(&bytes);
+        let _ = crate::ingest_pack_with_algorithm(&bytes, cvx_object::HashAlgorithm::Sha256);
     }
 }

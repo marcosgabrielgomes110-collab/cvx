@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Phase 5 hardening continues._
+_Post-0.4.0 work._
+
+## [0.4.0] - 2026-10-21
 
 ### Added
 
@@ -15,6 +17,8 @@ _Phase 5 hardening continues._
   `eol=lf`, `eol=crlf` and `binary`, including nested attribute files.
 - CRLF normalization on add/checkout and `core.autocrlf` support.
 - Repository-level benchmarks for 10k files and opt-in 100k files.
+- Local SHA-256 repositories via `cvx init --object-format sha256`, including
+  loose objects, packs, pack indexes, the index file, refs and local clones.
 - Release checksum verification and deterministic build timestamp.
 
 ### Changed

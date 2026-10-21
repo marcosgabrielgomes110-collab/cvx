@@ -189,7 +189,7 @@ impl Repository {
     }
 
     pub(crate) fn index_from_tree(&self, tree: &TreeSnapshot, filemode: bool) -> Result<Index> {
-        let mut new_index = Index::new();
+        let mut new_index = Index::new_with_algorithm(self.hash_algorithm());
         for (path, (mode, oid)) in tree {
             let absolute = self.work_tree().join(cvx_index::path_from_bytes(path)?);
             let metadata = std::fs::symlink_metadata(&absolute)

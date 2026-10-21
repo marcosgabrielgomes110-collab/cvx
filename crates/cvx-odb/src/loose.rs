@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{HashAlgorithm, ObjectId, ObjectKind, hash_object_with};
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -26,14 +26,26 @@ pub struct StoredObject {
 #[derive(Debug, Clone)]
 pub struct LooseStore {
     objects_dir: PathBuf,
+    algorithm: HashAlgorithm,
 }
 
 impl LooseStore {
     /// Creates a store rooted at an `objects/` directory.
     pub fn new(objects_dir: impl Into<PathBuf>) -> Self {
+        Self::new_with_algorithm(objects_dir, HashAlgorithm::Sha1)
+    }
+
+    /// Creates a store using a specific object format.
+    pub fn new_with_algorithm(objects_dir: impl Into<PathBuf>, algorithm: HashAlgorithm) -> Self {
         Self {
             objects_dir: objects_dir.into(),
+            algorithm,
         }
+    }
+
+    /// Returns the object format of this store.
+    pub fn algorithm(&self) -> HashAlgorithm {
+        self.algorithm
     }
 
     /// Returns the `objects/` directory.
@@ -57,7 +69,7 @@ impl LooseStore {
     /// Existing objects are never overwritten. The write is atomic and the
     /// resulting loose object is read-only, matching Git's permissions.
     pub fn write(&self, kind: ObjectKind, data: &[u8]) -> Result<ObjectId> {
-        let oid = hash_object(kind, data);
+        let oid = hash_object_with(self.algorithm, kind, data);
         let path = self.path_for(oid);
         if path.is_file() {
             return Ok(oid);
@@ -127,7 +139,7 @@ impl LooseStore {
                 data.len()
             )));
         }
-        if hash_object(kind, data) != oid {
+        if hash_object_with(oid.algorithm(), kind, data) != oid {
             return Err(Error::corrupt(format!(
                 "{} does not match its object identifier",
                 path.display()

@@ -5,14 +5,13 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
-use cvx_object::{ObjectId, ObjectKind, hash_object};
+use cvx_object::{HashAlgorithm, ObjectId, ObjectKind, hash_object_with};
 use flate2::read::ZlibDecoder;
 
 use crate::delta::apply_delta;
 use crate::idx::PackIndex;
 
 const PACK_HEADER_LEN: usize = 12;
-const CHECKSUM_LEN: usize = 20;
 const MAX_OBJECT_SIZE: u64 = 1024 * 1024 * 1024;
 const MAX_DELTA_DEPTH: usize = 64;
 
@@ -32,6 +31,7 @@ pub struct Pack {
     index: PackIndex,
     cache: RefCell<HashMap<u64, PackObject>>,
     object_count: usize,
+    algorithm: HashAlgorithm,
 }
 
 impl fmt::Debug for Pack {
@@ -47,15 +47,21 @@ impl fmt::Debug for Pack {
 impl Pack {
     /// Opens a pack given its `.idx` file.
     pub fn open(idx_path: &Path) -> Result<Self> {
+        Self::open_with_algorithm(idx_path, HashAlgorithm::Sha1)
+    }
+
+    /// Opens a pack using a specific repository object format.
+    pub fn open_with_algorithm(idx_path: &Path, algorithm: HashAlgorithm) -> Result<Self> {
         let index_bytes = std::fs::read(idx_path)
             .map_err(|error| Error::io(idx_path.display().to_string(), error))?;
-        let index = PackIndex::parse(index_bytes)?;
+        let index = PackIndex::parse(index_bytes, algorithm)?;
 
         let pack_path = idx_path.with_extension("pack");
         let data = std::fs::read(&pack_path)
             .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
 
-        if data.len() < PACK_HEADER_LEN + CHECKSUM_LEN {
+        let checksum_len = algorithm.oid_len();
+        if data.len() < PACK_HEADER_LEN + checksum_len {
             return Err(Error::corrupt(format!(
                 "{} is too short to be a packfile",
                 pack_path.display()
@@ -83,7 +89,7 @@ impl Pack {
             )));
         }
 
-        let pack_checksum = &data[data.len() - CHECKSUM_LEN..];
+        let pack_checksum = &data[data.len() - checksum_len..];
         if index.pack_checksum()? != pack_checksum {
             return Err(Error::corrupt(format!(
                 "{} does not match its index checksum",
@@ -97,6 +103,7 @@ impl Pack {
             index,
             cache: RefCell::new(HashMap::new()),
             object_count,
+            algorithm,
         })
     }
 
@@ -126,7 +133,7 @@ impl Pack {
             return Err(Error::object_not_found(oid.to_string()));
         };
         let object = self.read_at(offset, 0)?;
-        if hash_object(object.kind, &object.data) != oid {
+        if hash_object_with(self.algorithm, object.kind, &object.data) != oid {
             return Err(Error::corrupt(format!(
                 "packed object {oid} does not match its identifier"
             )));
@@ -170,7 +177,7 @@ impl Pack {
                 }
             }
             7 => {
-                let base_end = data_start + 20;
+                let base_end = data_start + self.algorithm.oid_len();
                 if base_end > self.object_data_end() {
                     return Err(Error::corrupt("pack ref delta is truncated"));
                 }
@@ -281,7 +288,7 @@ impl Pack {
     }
 
     fn object_data_end(&self) -> usize {
-        self.data.len().saturating_sub(CHECKSUM_LEN)
+        self.data.len().saturating_sub(self.algorithm.oid_len())
     }
 }
 
