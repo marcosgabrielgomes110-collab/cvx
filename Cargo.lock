@@ -386,6 +386,8 @@ name = "cvx-attributes"
 version = "0.3.1"
 dependencies = [
  "cvx-core",
+ "globset",
+ "tempfile",
 ]
 
 [[package]]
@@ -394,6 +396,7 @@ version = "0.3.1"
 dependencies = [
  "assert_cmd",
  "clap",
+ "criterion",
  "cvx-core",
  "cvx-credential",
  "cvx-github-api",
@@ -555,6 +558,7 @@ dependencies = [
 name = "cvx-repository"
 version = "0.3.1"
 dependencies = [
+ "cvx-attributes",
  "cvx-config",
  "cvx-core",
  "cvx-diff",

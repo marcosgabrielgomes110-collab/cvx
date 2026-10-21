@@ -59,6 +59,8 @@ impl Repository {
 
         let pathspecs = self.resolve_diff_pathspecs(options)?;
         let index = self.normalized_index_snapshot()?;
+        let attributes = self.attributes()?;
+        let autocrlf = self.autocrlf()?;
 
         let (old, new) = match options.revisions.len() {
             0 => {
@@ -67,7 +69,8 @@ impl Repository {
                     (head, index)
                 } else {
                     let paths: BTreeSet<Vec<u8>> = index.keys().cloned().collect();
-                    let worktree = self.worktree_snapshot(&paths, &pathspecs)?;
+                    let worktree =
+                        self.worktree_snapshot(&paths, &pathspecs, &attributes, autocrlf)?;
                     (index, worktree)
                 }
             }
@@ -80,7 +83,8 @@ impl Repository {
                 } else {
                     let mut paths: BTreeSet<Vec<u8>> = tree.keys().cloned().collect();
                     paths.extend(index.keys().cloned());
-                    let worktree = self.worktree_snapshot(&paths, &pathspecs)?;
+                    let worktree =
+                        self.worktree_snapshot(&paths, &pathspecs, &attributes, autocrlf)?;
                     (tree, worktree)
                 }
             }
@@ -163,6 +167,8 @@ impl Repository {
         &self,
         paths: &BTreeSet<Vec<u8>>,
         pathspecs: &[Vec<u8>],
+        attributes: &cvx_attributes::AttributeSet,
+        autocrlf: cvx_attributes::AutoCrlf,
     ) -> Result<Snapshot> {
         let filemode = self.filemode()?;
         let mut snapshot = Snapshot::new();
@@ -174,6 +180,9 @@ impl Repository {
             match read_content(self.work_tree(), path, filemode)? {
                 WorktreeContent::Missing | WorktreeContent::Directory => {}
                 WorktreeContent::File { mode, content } => {
+                    let attributes =
+                        cvx_attributes::effective_attributes(&attributes.for_path(path), autocrlf);
+                    let content = attributes.to_index_content(&content);
                     let oid = hash_object(ObjectKind::Blob, &content);
                     snapshot.insert(
                         path.clone(),

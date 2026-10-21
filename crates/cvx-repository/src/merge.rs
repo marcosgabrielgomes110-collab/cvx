@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use cvx_core::{Error, Result};
-use cvx_index::{Index, IndexEntry, IndexLock, MODE_GITLINK};
+use cvx_index::{Index, IndexEntry, IndexLock, MODE_GITLINK, MODE_SYMLINK};
 use cvx_merge::{FileMerge, MergeLabels, conflict_markers, merge_file, merge_mode};
 use cvx_object::{ObjectId, ObjectKind, hash_object};
 use cvx_ref::Head;
@@ -445,7 +445,18 @@ impl Repository {
         }
 
         self.objects().write(ObjectKind::Blob, content)?;
-        write_file(self.work_tree(), path, mode, content)?;
+        if mode & 0o170_000 == MODE_SYMLINK {
+            write_file(self.work_tree(), path, mode, content)?;
+        } else {
+            let attributes = self.effective_attributes_for(path, &self.attributes()?)?;
+            crate::worktree_ops::write_file_with_attributes(
+                self.work_tree(),
+                path,
+                mode,
+                content,
+                &attributes,
+            )?;
+        }
 
         let absolute = self.work_tree().join(cvx_index::path_from_bytes(path)?);
         let metadata = std::fs::symlink_metadata(&absolute)
@@ -488,7 +499,18 @@ impl Repository {
             if mode & 0o170_000 == MODE_GITLINK {
                 return Err(Error::unsupported("merging submodule entries"));
             }
-            write_file(self.work_tree(), path, mode, content)?;
+            if mode & 0o170_000 == MODE_SYMLINK {
+                write_file(self.work_tree(), path, mode, content)?;
+            } else {
+                let attributes = self.effective_attributes_for(path, &self.attributes()?)?;
+                crate::worktree_ops::write_file_with_attributes(
+                    self.work_tree(),
+                    path,
+                    mode,
+                    content,
+                    &attributes,
+                )?;
+            }
         }
 
         index.remove_path(path);

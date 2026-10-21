@@ -56,8 +56,11 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `.git/info/exclude` | Read | Compatibility mode |
 | `.cvx/info/exclude` custom patterns | Not read | Control directory is skipped explicitly |
 | Explicitly added ignored files | Added | Git would require `-f` |
-| `.gitattributes` | Not implemented | |
-| CRLF / `core.autocrlf` normalization | Not implemented | `cvx add` rejects enabled autocrlf |
+| `.gitattributes` | Implemented | `text`, `text=auto`, `-text`, `eol`, `binary` |
+| Nested `.gitattributes` | Implemented | Root and nested files, deeper rules override |
+| CRLF / `core.autocrlf` normalization | Implemented | `true`, `input` and `false` |
+| Working-tree encodings | Not implemented | Parsed but not converted |
+| Diff/merge attribute drivers | Not implemented | |
 | Nested repositories / submodules | Rejected by `add` | |
 | Non-UTF-8 paths | Supported on Unix | Rejected on Windows |
 | Hooks execution | Not implemented | |

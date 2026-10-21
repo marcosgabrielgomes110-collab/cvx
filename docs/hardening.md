@@ -49,11 +49,22 @@ $ cvx commit -m "retry"
 ## Benchmarks
 
 See [benchmarks](benchmarks.md). Criterion benchmarks cover pack write/ingest,
-index serialize/parse and diff rendering.
+index serialize/parse, diff rendering and repository operations on 10k files
+(100k with `CVX_BENCH_LARGE=1`).
+
+## Attribute normalization
+
+CRLF tests and `.gitattributes` integration live in `cvx-attributes` and
+`cvx-repository`. The following are covered:
+
+- `text`, `text=auto`, `-text`, `binary`;
+- `eol=lf`, `eol=crlf`;
+- nested `.gitattributes` files;
+- `core.autocrlf=true`, `input` and `false`;
+- normalization on add, status, diff, checkout, restore and merge.
 
 ## Remaining hardening
 
-- large-repository benchmark automation;
 - SHA-256 object format;
-- `.gitattributes` and CRLF normalization;
-- release signing and reproducible artifact verification.
+- release signing and fully reproducible artifacts;
+- working-tree encodings and diff/merge attribute drivers.

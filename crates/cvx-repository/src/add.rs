@@ -36,6 +36,11 @@ pub struct AddOutcome {
     pub unchanged: usize,
 }
 
+struct IndexAttributes<'a> {
+    attributes: &'a cvx_attributes::AttributeSet,
+    autocrlf: cvx_attributes::AutoCrlf,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PathspecKind {
     File,
@@ -60,16 +65,10 @@ impl Repository {
             ));
         }
 
-        if let Some(value) = self.config_value("core.autocrlf")? {
-            if matches!(
-                value.to_ascii_lowercase().as_str(),
-                "true" | "input" | "always"
-            ) {
-                return Err(Error::unsupported(
-                    "core.autocrlf text normalization is not implemented yet",
-                ));
-            }
-        }
+        let index_attributes = IndexAttributes {
+            attributes: &self.attributes()?,
+            autocrlf: self.autocrlf()?,
+        };
 
         let cwd = std::fs::canonicalize(&options.cwd).path_context(&options.cwd)?;
         let work_tree = self.work_tree();
@@ -124,7 +123,14 @@ impl Repository {
                     continue;
                 }
                 if seen.insert(relative.clone()) {
-                    self.stage_path(&mut index, &entry.path, relative, filemode, &mut outcome)?;
+                    self.stage_path(
+                        &mut index,
+                        &entry.path,
+                        relative,
+                        filemode,
+                        &index_attributes,
+                        &mut outcome,
+                    )?;
                 }
             }
         }
@@ -142,6 +148,7 @@ impl Repository {
                     &spec.absolute,
                     spec.relative.clone(),
                     filemode,
+                    &index_attributes,
                     &mut outcome,
                 )?;
             }
@@ -234,6 +241,7 @@ impl Repository {
         absolute: &Path,
         relative: Vec<u8>,
         filemode: bool,
+        index_attributes: &IndexAttributes<'_>,
         outcome: &mut AddOutcome,
     ) -> Result<()> {
         let metadata = std::fs::symlink_metadata(absolute).path_context(absolute)?;
@@ -251,7 +259,11 @@ impl Repository {
             let target = std::fs::read_link(absolute).path_context(absolute)?;
             path_to_bytes(&target)?
         } else {
-            std::fs::read(absolute).path_context(absolute)?
+            let attributes = cvx_attributes::effective_attributes(
+                &index_attributes.attributes.for_path(&relative),
+                index_attributes.autocrlf,
+            );
+            attributes.to_index_content(&std::fs::read(absolute).path_context(absolute)?)
         };
 
         let oid = self.objects().write(ObjectKind::Blob, &content)?;
@@ -339,6 +351,23 @@ fn lexical_absolute(cwd: &Path, path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::InitOptions;
+
+    fn repository(temp: &Path) -> Repository {
+        let repository = match Repository::init(InitOptions {
+            directory: temp.to_path_buf(),
+            ..InitOptions::default()
+        })
+        .expect("init")
+        {
+            crate::InitOutcome::Created(repository) => repository,
+            _ => panic!("expected new repository"),
+        };
+        let config = repository.control_dir().join("config");
+        let mut contents = std::fs::read_to_string(&config).expect("config");
+        contents.push_str("\n[user]\n\tname = Test User\n\temail = test@example.com\n");
+        std::fs::write(config, contents).expect("config");
+        repository
+    }
 
     #[test]
     fn matches_directories_and_files() {
@@ -471,5 +500,79 @@ mod tests {
         assert!(index.get(b"tracked.txt").is_some());
         assert!(index.get(b".gitignore").is_some());
         assert!(index.get(b"ignored.txt").is_none());
+    }
+
+    #[test]
+    fn normalizes_text_attributes_when_adding() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let repository = repository(temp.path());
+        std::fs::write(temp.path().join(".gitattributes"), "*.txt text eol=lf\n").expect("write");
+        std::fs::write(temp.path().join("file.txt"), "one\r\ntwo\r\n").expect("write");
+
+        repository
+            .add(AddOptions {
+                paths: vec![PathBuf::from(".")],
+                cwd: temp.path().to_path_buf(),
+                force: false,
+                update: false,
+                all: true,
+            })
+            .expect("add");
+
+        let index = repository.read_index().expect("index");
+        let oid = index.get(b"file.txt").expect("entry").oid;
+        let object = repository.read_object(oid).expect("blob");
+        assert_eq!(object.data, b"one\ntwo\n");
+    }
+
+    #[test]
+    fn core_autocrlf_normalizes_and_restores_crlf() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let repository = repository(temp.path());
+        let config = repository.control_dir().join("config");
+        let mut contents = std::fs::read_to_string(&config).expect("config");
+        contents.push_str("\n[core]\n\tautocrlf = true\n");
+        std::fs::write(config, contents).expect("config");
+        std::fs::write(temp.path().join("file.txt"), "one\r\ntwo\r\n").expect("write");
+
+        repository
+            .add(AddOptions {
+                paths: vec![PathBuf::from(".")],
+                cwd: temp.path().to_path_buf(),
+                force: false,
+                update: false,
+                all: true,
+            })
+            .expect("add");
+
+        let index = repository.read_index().expect("index");
+        let oid = index.get(b"file.txt").expect("entry").oid;
+        assert_eq!(
+            repository.read_object(oid).expect("blob").data,
+            b"one\ntwo\n"
+        );
+        let status = repository
+            .status(crate::StatusOptions::default())
+            .expect("status");
+        assert!(
+            status.unstaged.is_empty(),
+            "CRLF worktree must compare clean"
+        );
+
+        std::fs::remove_file(temp.path().join("file.txt")).expect("remove");
+        repository
+            .restore(&crate::RestoreOptions {
+                staged: false,
+                worktree: true,
+                source: None,
+                paths: vec![PathBuf::from("file.txt")],
+                cwd: temp.path().to_path_buf(),
+                force: false,
+            })
+            .expect("restore");
+        assert_eq!(
+            std::fs::read(temp.path().join("file.txt")).expect("file"),
+            b"one\r\ntwo\r\n"
+        );
     }
 }

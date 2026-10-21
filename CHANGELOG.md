@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Phase 5 hardening continues._
 
+### Added
+
+- `.gitattributes` parsing and matching for `text`, `text=auto`, `-text`,
+  `eol=lf`, `eol=crlf` and `binary`, including nested attribute files.
+- CRLF normalization on add/checkout and `core.autocrlf` support.
+- Repository-level benchmarks for 10k files and opt-in 100k files.
+- Release checksum verification and deterministic build timestamp.
+
+### Changed
+
+- `cvx add` no longer rejects `core.autocrlf`.
+
 ## [0.3.1] - 2026-10-21
 
 ### Added

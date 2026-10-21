@@ -107,14 +107,15 @@ Implemented:
 - generic GraphQL queries with inline or file-based variables;
 - property-based fuzz tests for pack, index, object, config and protocol parsers;
 - crash failpoints for commit, index, ref and pack publication;
-- Criterion benchmarks for pack, index and diff throughput;
+- Criterion benchmarks for pack, index, diff and repository operations;
+- `.gitattributes` text/eol/binary handling with `core.autocrlf`;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
 Not implemented yet: shallow fetch updates/unshallow, `--filter` for local
 paths, automatic pagination beyond the first 100 entries, SHA-256 repositories,
-submodules, LFS, hooks, commit signing, `.gitattributes`, CRLF normalization,
-large-repository benchmark automation and release signing.
+submodules, LFS, hooks, commit signing, working-tree encodings, diff/merge
+attribute drivers, and release signing.
 
 ## Design decisions
 

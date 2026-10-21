@@ -208,6 +208,8 @@ impl Repository {
         filemode: bool,
         force: bool,
     ) -> Result<()> {
+        let attributes = self.attributes()?;
+        let autocrlf = self.autocrlf()?;
         for (path, (mode, oid)) in target {
             if mode & 0o170_000 == MODE_GITLINK {
                 return Err(Error::unsupported("checking out submodule entries"));
@@ -238,7 +240,19 @@ impl Repository {
                     oid, object.kind
                 )));
             }
-            write_file(self.work_tree(), path, *mode, &object.data)?;
+            if *mode & 0o170_000 == cvx_object::MODE_SYMLINK {
+                write_file(self.work_tree(), path, *mode, &object.data)?;
+            } else {
+                let attributes =
+                    cvx_attributes::effective_attributes(&attributes.for_path(path), autocrlf);
+                crate::worktree_ops::write_file_with_attributes(
+                    self.work_tree(),
+                    path,
+                    *mode,
+                    &object.data,
+                    &attributes,
+                )?;
+            }
         }
 
         for path in index.keys() {

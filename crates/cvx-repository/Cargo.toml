@@ -9,6 +9,7 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
+cvx-attributes = { workspace = true }
 cvx-config = { workspace = true }
 cvx-core = { workspace = true }
 cvx-diff = { workspace = true }

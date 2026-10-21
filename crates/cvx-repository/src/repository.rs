@@ -349,6 +349,32 @@ impl Repository {
         Ok(self.config_bool("core.filemode")?.unwrap_or(cfg!(unix)))
     }
 
+    /// Loads the root `.gitattributes` file.
+    pub fn attributes(&self) -> Result<cvx_attributes::AttributeSet> {
+        cvx_attributes::AttributeSet::load(self.work_tree())
+    }
+
+    /// Returns the effective CRLF policy from configuration.
+    pub fn autocrlf(&self) -> Result<cvx_attributes::AutoCrlf> {
+        let Some(value) = self.config_value("core.autocrlf")? else {
+            return Ok(cvx_attributes::AutoCrlf::False);
+        };
+        cvx_attributes::AutoCrlf::parse(&value)
+            .ok_or_else(|| Error::Message(format!("invalid core.autocrlf value: {value}")))
+    }
+
+    /// Returns effective attributes for a repository-relative path.
+    pub fn effective_attributes_for(
+        &self,
+        path: &[u8],
+        attributes: &cvx_attributes::AttributeSet,
+    ) -> Result<cvx_attributes::Attributes> {
+        Ok(cvx_attributes::effective_attributes(
+            &attributes.for_path(path),
+            self.autocrlf()?,
+        ))
+    }
+
     /// Returns the shallow boundaries recorded in the repository.
     pub fn shallow_commits(&self) -> Result<BTreeSet<ObjectId>> {
         let path = self.control_dir().join("shallow");

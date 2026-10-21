@@ -52,6 +52,8 @@ impl Repository {
         let cwd = std::fs::canonicalize(&options.cwd).path_context(&options.cwd)?;
         let specs = self.resolve_restore_pathspecs(&cwd, &options.paths)?;
         let filemode = self.filemode()?;
+        let attributes = self.attributes()?;
+        let autocrlf = self.autocrlf()?;
 
         let lock = if staged {
             Some(IndexLock::acquire(self.control_dir())?)
@@ -127,7 +129,19 @@ impl Repository {
                         oid, object.kind
                     )));
                 }
-                write_file(self.work_tree(), path, *mode, &object.data)?;
+                if *mode & 0o170_000 == cvx_object::MODE_SYMLINK {
+                    write_file(self.work_tree(), path, *mode, &object.data)?;
+                } else {
+                    let effective =
+                        cvx_attributes::effective_attributes(&attributes.for_path(path), autocrlf);
+                    crate::worktree_ops::write_file_with_attributes(
+                        self.work_tree(),
+                        path,
+                        *mode,
+                        &object.data,
+                        &effective,
+                    )?;
+                }
                 outcome.restored += 1;
             }
 

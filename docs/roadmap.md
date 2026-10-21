@@ -79,14 +79,18 @@ Implemented:
   parsers;
 - crash failpoints and recovery tests for commit, index, ref and pack
   publication;
-- Criterion benchmarks for pack, index and diff throughput.
+- Criterion benchmarks for pack, index, diff and repository operations,
+  including an opt-in 100k-file scenario;
+- `.gitattributes` text/eol/binary matching with nested files;
+- CRLF normalization for `core.autocrlf=true`, `input` and `false`;
+- checksum verification and deterministic timestamp configuration in the
+  release workflow.
 
 Remaining:
 
-- large-repository benchmark automation on 10k/100k files;
 - SHA-256 repository support;
-- `.gitattributes` and line-ending normalization;
-- release signing and reproducible artifacts.
+- release signing and fully reproducible artifacts;
+- working-tree encodings and diff/merge attribute drivers.
 
 ## Definition of done
 

@@ -164,6 +164,8 @@ impl Repository {
             .map(str::to_owned);
         let unborn = head.is_unborn();
         let filemode = self.filemode()?;
+        let attributes = self.attributes()?;
+        let autocrlf = self.autocrlf()?;
 
         let index = self.read_index()?;
         let index_paths: BTreeSet<Vec<u8>> = index
@@ -230,7 +232,7 @@ impl Repository {
                 continue;
             }
 
-            match worktree_content(self.work_tree(), path, filemode)? {
+            match worktree_content(self.work_tree(), path, filemode, &attributes, autocrlf)? {
                 WorktreeContent::Missing => {
                     unstaged.insert(path.clone(), StatusKind::Deleted);
                 }
@@ -480,7 +482,13 @@ fn mode_bits(mode: u32) -> u32 {
     mode & 0o170_000
 }
 
-fn worktree_content(work_tree: &Path, relative: &[u8], filemode: bool) -> Result<WorktreeContent> {
+fn worktree_content(
+    work_tree: &Path,
+    relative: &[u8],
+    filemode: bool,
+    attributes: &cvx_attributes::AttributeSet,
+    autocrlf: cvx_attributes::AutoCrlf,
+) -> Result<WorktreeContent> {
     let components: Vec<&[u8]> = relative.split(|byte| *byte == b'/').collect();
     if components.is_empty() {
         return Ok(WorktreeContent::Missing);
@@ -511,7 +519,9 @@ fn worktree_content(work_tree: &Path, relative: &[u8], filemode: bool) -> Result
             continue;
         }
 
-        return classify_metadata(&current, &metadata, filemode);
+        return classify_metadata(
+            &current, &metadata, filemode, attributes, autocrlf, relative,
+        );
     }
 
     Ok(WorktreeContent::Missing)
@@ -521,6 +531,9 @@ fn classify_metadata(
     path: &Path,
     metadata: &std::fs::Metadata,
     filemode: bool,
+    attributes: &cvx_attributes::AttributeSet,
+    autocrlf: cvx_attributes::AutoCrlf,
+    relative: &[u8],
 ) -> Result<WorktreeContent> {
     let file_type = metadata.file_type();
 
@@ -538,6 +551,8 @@ fn classify_metadata(
     }
 
     let content = std::fs::read(path).path_context(path)?;
+    let attributes = cvx_attributes::effective_attributes(&attributes.for_path(relative), autocrlf);
+    let content = attributes.to_index_content(&content);
     let mode = worktree_mode(metadata, filemode);
     Ok(WorktreeContent::File {
         mode,

@@ -296,18 +296,46 @@ fn add_rejects_nested_repositories() {
 }
 
 #[test]
-fn add_rejects_unsupported_crlf_normalization() {
-    let env =
-        TestEnv::with_global_config("[init]\n\tdefaultBranch = main\n[core]\n\tautocrlf = true\n");
+fn add_normalizes_crlf_when_autocrlf_is_enabled() {
+    let env = TestEnv::with_global_config(
+        "[init]\n\tdefaultBranch = main\n[core]\n\tautocrlf = true\n[user]\n\tname = Test User\n\temail = test@example.com\n",
+    );
     env.cvx().args(["init"]).assert().success();
-    env.write("file.txt", "content\n");
-
+    env.write("file.txt", "one\r\ntwo\r\n");
+    env.cvx().args(["add", "."]).assert().success();
     env.cvx()
-        .args(["add", "."])
+        .args(["commit", "-m", "normalized"])
         .assert()
-        .failure()
-        .code(128)
-        .stderr(predicate::str::contains("core.autocrlf"));
+        .success();
+
+    let blob = env.assert_git_cvx_ok(&["show", "HEAD:file.txt"]);
+    assert_eq!(stdout(&blob), "one\ntwo\n");
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+}
+
+#[test]
+fn gitattributes_controls_index_and_worktree_line_endings() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write(".gitattributes", "*.txt text eol=crlf\n");
+    env.write("file.txt", "one\r\ntwo\r\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx()
+        .args(["commit", "-m", "attributes"])
+        .assert()
+        .success();
+
+    let blob = env.assert_git_cvx_ok(&["show", "HEAD:file.txt"]);
+    assert_eq!(stdout(&blob), "one\ntwo\n");
+
+    env.remove("file.txt");
+    env.cvx().args(["restore", "file.txt"]).assert().success();
+    assert_eq!(env.read("file.txt"), "one\r\ntwo\r\n");
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+    let diff = env.cvx().args(["diff"]).output().unwrap();
+    assert_eq!(normalize(&diff), "");
 }
 
 #[test]

@@ -31,6 +31,12 @@ jobs:
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Configure reproducible build
+        shell: bash
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
+
       - name: Build release binary
         run: cargo build --release --locked -p cvx-cli
 
@@ -49,6 +55,21 @@ jobs:
           Compress-Archive -Path target/release/cvx.exe -DestinationPath $archive
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
           "$hash  $archive" | Out-File "$archive.sha256" -Encoding ascii
+
+      - name: Verify checksums (Unix)
+        if: runner.os != 'Windows'
+        run: ./scripts/verify-release.sh .
+
+      - name: Verify checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Filter *.sha256 | ForEach-Object {
+            $line = Get-Content $_.FullName
+            $fields = $line -split '\s+'
+            $actual = (Get-FileHash $fields[1] -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $fields[0]) { throw "checksum mismatch: $($fields[1])" }
+          }
 
       - name: Upload packaged binary
         uses: actions/upload-artifact@v7
@@ -73,6 +94,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           merge-multiple: true
+
+      - name: Verify downloaded checksums
+        run: |
+          for checksum in *.sha256; do
+            sha256sum -c "$checksum"
+          done
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v3

@@ -41,15 +41,31 @@ Criterion benchmarks are implemented for the engine hot paths:
 | `cvx-index` | index serialize and parse | 1k, 10k, 50k entries |
 | `cvx-diff` | unified diff and diffstat | 1k, 10k, 50k lines |
 
-Repository-level scenarios still to automate:
+Repository-level benchmarks are included for 10k files; set
+`CVX_BENCH_LARGE=1` to also run the 100k-file scenario.
 
 | Operation | Data size | Status |
 |---|---:|---|
-| `status` | 10k files | Planned |
-| `status` | 100k files | Planned |
+| `status` | 10k files | Implemented |
+| `status` | 100k files | Implemented, opt-in |
+| `diff` | 10k files | Implemented |
+| `log -n 10` | 10k-file repository | Implemented |
 | `log --oneline` | 100k commits | Planned |
 | `switch` | 10k-file tree | Planned |
 | `clone` | 100k-object repository | Planned |
+
+### Example run
+
+Measured on Linux 7.2.11 x86_64, 12 CPUs, Rust 1.99.1, release profile:
+
+| Operation | Data size | Time |
+|---|---:|---:|
+| `status` | 10k files | 46.6 ms |
+| `diff` | 10k files | 40.6 ms |
+| `log -n 10` | 10k-file repository | 12.3 µs |
+
+> These are one machine's results, not guarantees. Reproduce with
+> `cargo bench -p cvx-cli --bench repository -- --quick`.
 
 Run the current suite with:
 

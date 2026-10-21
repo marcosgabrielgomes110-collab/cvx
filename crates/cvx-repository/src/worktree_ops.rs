@@ -71,6 +71,17 @@ pub(crate) fn read_content(
     Ok(WorktreeContent::Missing)
 }
 
+pub(crate) fn write_file_with_attributes(
+    work_tree: &Path,
+    relative: &[u8],
+    mode: u32,
+    content: &[u8],
+    attributes: &cvx_attributes::Attributes,
+) -> Result<()> {
+    let content = attributes.to_worktree_content(content);
+    write_file(work_tree, relative, mode, &content)
+}
+
 pub(crate) fn write_file(
     work_tree: &Path,
     relative: &[u8],

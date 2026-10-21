@@ -10,6 +10,10 @@ publish.workspace = true
 
 [dependencies]
 cvx-core = { workspace = true }
+globset = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
