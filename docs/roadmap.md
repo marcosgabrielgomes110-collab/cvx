@@ -14,6 +14,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete — v0.4.0 |
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
+| 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -137,6 +138,28 @@ Remaining:
 
 - pack and index streaming with bounded memory;
 - thin-pack generation and network SHA-256;
+- hooks, commit signing, submodules and LFS.
+
+## Phase 8 — streaming, thin packs and network formats
+
+Implemented in v0.7.0:
+
+- file-backed `Pack` reads with on-demand zlib decompression and a bounded
+  object cache;
+- thin-pack ingestion with external ref-delta bases resolved from the local
+  object database;
+- protocol-v2 `object-format` negotiation and SHA-256 receive-pack capability
+  handling for HTTPS and SSH;
+- fetch requests for thin packs and partial-clone lazy fetches using local bases;
+- `gc.before-prune` recovery coverage and concurrent `add` consistency tests;
+- memory-ceiling large benchmark script.
+
+Remaining:
+
+- streaming index and network response bodies, and bounded-memory pack writing;
+- thin-pack generation for push;
+- end-to-end SHA-256 server integration tests against a live Git server;
+- lock timeout/stale-lock recovery and multi-process soak tests;
 - hooks, commit signing, submodules and LFS.
 
 ## Definition of done

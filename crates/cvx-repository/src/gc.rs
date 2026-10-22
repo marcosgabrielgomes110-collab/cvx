@@ -68,6 +68,8 @@ impl Repository {
             new_index_path = Some(outcome.index_path);
         }
 
+        cvx_core::failpoint::hit("gc.before-prune")?;
+
         if !prune {
             for (kind, data) in &inputs_data {
                 let oid = cvx_object::hash_object_with(self.hash_algorithm(), *kind, data);

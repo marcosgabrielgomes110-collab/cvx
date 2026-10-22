@@ -48,11 +48,31 @@ impl NetworkTransport {
         }
     }
 
+    /// Discovers the server's object format.
+    pub fn object_format(&self) -> Result<cvx_object::HashAlgorithm> {
+        match self {
+            Self::Http(transport) => transport.object_format(),
+            Self::Ssh(transport) => transport.object_format(),
+        }
+    }
+
     /// Lists references through protocol v2 `ls-refs`.
     pub fn ls_refs(&self, prefixes: &[&str]) -> Result<LsRefsResponse> {
         match self {
             Self::Http(transport) => transport.ls_refs(prefixes),
             Self::Ssh(transport) => transport.ls_refs(prefixes),
+        }
+    }
+
+    /// Lists references using a negotiated object format.
+    pub fn ls_refs_with_algorithm(
+        &self,
+        prefixes: &[&str],
+        algorithm: cvx_object::HashAlgorithm,
+    ) -> Result<LsRefsResponse> {
+        match self {
+            Self::Http(transport) => transport.ls_refs_with_algorithm(prefixes, algorithm),
+            Self::Ssh(transport) => transport.ls_refs_with_algorithm(prefixes, algorithm),
         }
     }
 
@@ -75,6 +95,26 @@ impl NetworkTransport {
         match self {
             Self::Http(transport) => transport.fetch_full(wants, deepen, shallow, filter),
             Self::Ssh(transport) => transport.fetch_full(wants, deepen, shallow, filter),
+        }
+    }
+
+    /// Fetches with an explicit object format and thin-pack mode.
+    pub fn fetch_full_with_algorithm(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: cvx_object::HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponse> {
+        match self {
+            Self::Http(transport) => {
+                transport.fetch_full_with_algorithm(wants, deepen, shallow, filter, algorithm, thin)
+            }
+            Self::Ssh(transport) => {
+                transport.fetch_full_with_algorithm(wants, deepen, shallow, filter, algorithm, thin)
+            }
         }
     }
 

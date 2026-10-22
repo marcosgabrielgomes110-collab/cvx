@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.6.0 work._
+_Post-0.7.0 work._
+
+## [0.7.0] - 2026-10-22
+
+### Added
+
+- File-backed pack reads: the pack payload is no longer loaded wholesale;
+  objects are decompressed on demand with a bounded object cache.
+- Thin-pack ingestion: ref-delta bases are resolved from the local object
+  database during fetch and partial-clone lazy fetching.
+- Protocol v2 object-format negotiation for SHA-256 over HTTPS and SSH, plus
+  SHA-256 receive-pack capability handling.
+- `gc.before-prune` failpoint and recovery coverage, and a concurrent
+  `cvx add` consistency test.
+- `scripts/bench-large.sh` with an optional address-space ceiling for large
+  repository benchmarks.
+
+### Changed
+
+- Fetch requests now ask for thin packs and stream pack verification through a
+  reader instead of buffering the complete file.
+- Major pack reads and network fetches are covered by the new thin-base path.
 
 ## [0.6.0] - 2026-10-22
 

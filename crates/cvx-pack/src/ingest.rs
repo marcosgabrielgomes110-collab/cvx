@@ -33,6 +33,21 @@ pub fn ingest_pack_with_algorithm(
     bytes: &[u8],
     algorithm: HashAlgorithm,
 ) -> Result<Vec<IngestedObject>> {
+    ingest_pack_with_bases(bytes, algorithm, |_| Ok(None))
+}
+
+/// Decodes a received pack, resolving thin-pack bases through a callback.
+///
+/// The callback is only called for ref-delta bases that are not present in the
+/// pack. This allows fetch to complete thin packs from the local object store.
+pub fn ingest_pack_with_bases<F>(
+    bytes: &[u8],
+    algorithm: HashAlgorithm,
+    mut resolve: F,
+) -> Result<Vec<IngestedObject>>
+where
+    F: FnMut(ObjectId) -> Result<Option<IngestedObject>>,
+{
     let checksum_len = algorithm.oid_len();
     if bytes.len() < 12 + checksum_len {
         return Err(Error::corrupt("received pack is too short"));
@@ -55,6 +70,7 @@ pub fn ingest_pack_with_algorithm(
     let mut objects: Vec<IngestedObject> = Vec::with_capacity(count);
     let mut by_offset: HashMap<usize, usize> = HashMap::new();
     let mut by_oid: HashMap<ObjectId, usize> = HashMap::new();
+    let mut external: HashMap<ObjectId, IngestedObject> = HashMap::new();
     let mut position = 12;
 
     for _ in 0..count {
@@ -103,14 +119,28 @@ pub fn ingest_pack_with_algorithm(
                 let base_oid = ObjectId::from_slice(&bytes[position..base_end])
                     .map_err(|error| Error::corrupt(format!("invalid delta base: {error}")))?;
                 position = base_end;
-                let base_index = *by_oid.get(&base_oid).ok_or_else(|| {
-                    Error::corrupt(format!(
-                        "received thin pack references missing base {base_oid}"
-                    ))
-                })?;
+                let base = if let Some(index) = by_oid.get(&base_oid) {
+                    &objects[*index]
+                } else {
+                    if let std::collections::hash_map::Entry::Vacant(entry) =
+                        external.entry(base_oid)
+                    {
+                        let base = resolve(base_oid)?.ok_or_else(|| {
+                            Error::corrupt(format!(
+                                "received thin pack references missing base {base_oid}"
+                            ))
+                        })?;
+                        if hash_object_with(algorithm, base.kind, &base.data) != base_oid {
+                            return Err(Error::corrupt(format!(
+                                "thin-pack base {base_oid} does not match its identifier"
+                            )));
+                        }
+                        entry.insert(base);
+                    }
+                    external.get(&base_oid).expect("base inserted above")
+                };
                 let (delta, consumed) = decompress(&bytes[..payload_end], position)?;
                 position += consumed;
-                let base = &objects[base_index];
                 (base.kind, apply_delta(&base.data, &delta)?)
             }
             other => {
@@ -324,5 +354,57 @@ mod tests {
 
         let bytes = std::fs::read(&outcome.pack_path).expect("read");
         assert!(ingest_pack(&bytes[..bytes.len() / 2]).is_err());
+    }
+
+    #[test]
+    fn resolves_thin_pack_bases_externally() {
+        use flate2::Compression;
+        use flate2::write::ZlibEncoder;
+        use std::io::Write;
+
+        let base = b"base line one\nbase line two\nbase line three\n".to_vec();
+        let target = b"base line one\nbase line two changed\nbase line three\nnew line\n".to_vec();
+        let delta = crate::delta::create_delta(&base, &target);
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&delta).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let mut pack = Vec::new();
+        pack.extend_from_slice(b"PACK");
+        pack.extend_from_slice(&2u32.to_be_bytes());
+        pack.extend_from_slice(&1u32.to_be_bytes());
+        let mut size = delta.len() as u64;
+        let mut header = (7u8 << 4) | (size & 0x0f) as u8;
+        size >>= 4;
+        if size > 0 {
+            header |= 0x80;
+        }
+        pack.push(header);
+        while size > 0 {
+            let mut byte = (size & 0x7f) as u8;
+            size >>= 7;
+            if size > 0 {
+                byte |= 0x80;
+            }
+            pack.push(byte);
+        }
+        let base_oid = hash_object_with(HashAlgorithm::Sha1, ObjectKind::Blob, &base);
+        pack.extend_from_slice(base_oid.as_bytes());
+        pack.extend_from_slice(&compressed);
+        let checksum = crate::checksum::checksum(HashAlgorithm::Sha1, &pack);
+        pack.extend_from_slice(&checksum);
+
+        assert!(ingest_pack(&pack).is_err());
+        let objects = ingest_pack_with_bases(&pack, HashAlgorithm::Sha1, |oid| {
+            assert_eq!(oid, base_oid);
+            Ok(Some(IngestedObject {
+                oid: base_oid,
+                kind: ObjectKind::Blob,
+                data: base.clone(),
+            }))
+        })
+        .expect("thin pack");
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].data, target);
     }
 }

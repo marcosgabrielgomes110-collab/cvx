@@ -184,3 +184,52 @@ fn interrupted_hard_reset_can_be_retried() {
     assert_eq!(normalize(&status), "");
     env.assert_git_cvx_ok(&["fsck", "--strict"]);
 }
+
+#[test]
+fn interrupted_gc_before_deletion_keeps_the_repository_usable() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "one\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "one"]).assert().success();
+
+    env.cvx()
+        .env("CVX_FAILPOINT", "gc.before-prune")
+        .args(["gc", "--prune"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("injected failure"));
+
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+    env.cvx().arg("fsck").assert().success();
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+
+    env.cvx().args(["gc", "--prune"]).assert().success();
+    env.cvx().arg("fsck").assert().success();
+}
+
+#[test]
+fn concurrent_add_processes_leave_a_consistent_index() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    for index in 0..20 {
+        env.write(&format!("file-{index}.txt"), "content\n");
+    }
+
+    let mut first = env.cvx();
+    first.args(["add", "."]);
+    let mut second = env.cvx();
+    second.args(["add", "."]);
+    let mut first = first.spawn().expect("spawn first add");
+    let mut second = second.spawn().expect("spawn second add");
+    let first_status = first.wait().expect("wait first");
+    let second_status = second.wait().expect("wait second");
+    assert!(first_status.success() || second_status.success());
+
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    let output = stdout(&status);
+    assert!(output.contains("file-0.txt"));
+    env.cvx().arg("fsck").assert().success();
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}

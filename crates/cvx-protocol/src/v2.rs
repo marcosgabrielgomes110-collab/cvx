@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use cvx_core::{Error, Result};
-use cvx_object::ObjectId;
+use cvx_object::{HashAlgorithm, ObjectId};
 
 use crate::pkt::{PktLine, delimiter, encode_text, flush, parse_all};
 
@@ -17,6 +17,8 @@ pub struct LsRefsRequest {
     pub symrefs: bool,
     /// Ask the server to peel annotated tags.
     pub peel: bool,
+    /// Object format negotiated with the server.
+    pub object_format: HashAlgorithm,
 }
 
 impl LsRefsRequest {
@@ -33,7 +35,7 @@ impl LsRefsRequest {
             validate_argument(prefix)?;
             arguments.push(format!("ref-prefix {prefix}"));
         }
-        encode_request("ls-refs", &arguments)
+        encode_request_with_format("ls-refs", &arguments, self.object_format)
     }
 }
 
@@ -60,6 +62,8 @@ pub struct FetchRequest {
     pub shallow: Vec<ObjectId>,
     /// Partial-clone filter specification, such as `blob:none`.
     pub filter: Option<String>,
+    /// Object format negotiated with the server.
+    pub object_format: HashAlgorithm,
 }
 
 impl FetchRequest {
@@ -102,17 +106,29 @@ impl FetchRequest {
             validate_argument(filter)?;
             arguments.push(format!("filter {filter}"));
         }
-        encode_request("fetch", &arguments)
+        encode_request_with_format("fetch", &arguments, self.object_format)
     }
 }
 
 /// Builds a protocol v2 request with command and capability headers.
 pub fn encode_request(command: &str, arguments: &[String]) -> Result<Vec<u8>> {
+    encode_request_with_format(command, arguments, HashAlgorithm::Sha1)
+}
+
+/// Builds a protocol v2 request for a specific object format.
+pub fn encode_request_with_format(
+    command: &str,
+    arguments: &[String],
+    object_format: HashAlgorithm,
+) -> Result<Vec<u8>> {
     validate_argument(command)?;
     let mut output = Vec::new();
     output.extend(encode_text(&format!("command={command}\n"))?);
     output.extend(encode_text(&format!("agent={AGENT}\n"))?);
-    output.extend(encode_text("object-format=sha1\n")?);
+    output.extend(encode_text(&format!(
+        "object-format={}\n",
+        object_format.name()
+    ))?);
     output.extend(delimiter());
     for argument in arguments {
         validate_argument(argument)?;
@@ -183,6 +199,7 @@ mod tests {
             ref_prefixes: vec!["refs/heads/".to_owned()],
             symrefs: true,
             peel: true,
+            object_format: HashAlgorithm::Sha1,
         };
         let packets = parse_all(&request.encode().expect("encode")).expect("parse");
         assert_eq!(
@@ -209,6 +226,7 @@ mod tests {
             deepen: Some(1),
             shallow: vec![oid(3)],
             filter: Some("blob:none".to_owned()),
+            object_format: HashAlgorithm::Sha1,
         };
         let packets = parse_all(&request.encode().expect("encode")).expect("parse");
         let data: Vec<String> = packets
@@ -226,6 +244,24 @@ mod tests {
         assert!(data.contains(&"deepen 1".to_owned()));
         assert!(data.contains(&format!("shallow {}", oid(3))));
         assert!(data.contains(&"filter blob:none".to_owned()));
+    }
+
+    #[test]
+    fn encodes_sha256_object_format() {
+        let oid = ObjectId::from_sha256_bytes([1; 32]);
+        let request = FetchRequest {
+            wants: vec![oid],
+            object_format: HashAlgorithm::Sha256,
+            ..FetchRequest::default()
+        };
+        let packets = parse_all(&request.encode().expect("encode")).expect("parse");
+        let data: Vec<String> = packets
+            .iter()
+            .filter_map(PktLine::data)
+            .map(|data| String::from_utf8_lossy(data).trim_end().to_owned())
+            .collect();
+        assert!(data.contains(&"object-format=sha256".to_owned()));
+        assert!(data.contains(&format!("want {oid}")));
     }
 
     #[test]

@@ -16,6 +16,6 @@ pub use pkt::{
     response_end,
 };
 pub use v2::{
-    AGENT, FetchRequest, LsRefsRequest, encode_request, parse_capabilities,
-    parse_capability_packets,
+    AGENT, FetchRequest, LsRefsRequest, encode_request, encode_request_with_format,
+    parse_capabilities, parse_capability_packets,
 };

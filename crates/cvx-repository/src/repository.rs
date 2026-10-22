@@ -262,9 +262,16 @@ impl Repository {
                     return Err(Error::object_not_found(oid.to_string()));
                 };
                 let transport = NetworkTransport::open(&url)?;
-                let response = transport.fetch_full(&[oid], None, &[], Some("blob:none"))?;
+                let response = transport.fetch_full_with_algorithm(
+                    &[oid],
+                    None,
+                    &[],
+                    Some("blob:none"),
+                    self.hash_algorithm(),
+                    true,
+                )?;
                 for object in
-                    cvx_pack::ingest_pack_with_algorithm(&response.pack, self.hash_algorithm())?
+                    self.ingest_pack_with_local_bases(&response.pack, self.hash_algorithm())?
                 {
                     self.objects().write(object.kind, &object.data)?;
                 }
@@ -272,6 +279,22 @@ impl Repository {
             }
             Err(error) => Err(error),
         }
+    }
+
+    pub(crate) fn ingest_pack_with_local_bases(
+        &self,
+        pack: &[u8],
+        algorithm: HashAlgorithm,
+    ) -> Result<Vec<cvx_pack::IngestedObject>> {
+        cvx_pack::ingest_pack_with_bases(pack, algorithm, |oid| match self.objects().read(oid) {
+            Ok(object) => Ok(Some(cvx_pack::IngestedObject {
+                oid,
+                kind: object.kind,
+                data: object.data,
+            })),
+            Err(Error::ObjectNotFound { .. }) => Ok(None),
+            Err(error) => Err(error),
+        })
     }
 
     /// Returns the promisor remote URL for a partial clone.

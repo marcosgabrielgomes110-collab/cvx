@@ -277,7 +277,9 @@ impl Repository {
     fn clone_http(options: &CloneOptions) -> Result<CloneOutcome> {
         ensure_empty_destination(&options.directory)?;
         let transport = NetworkTransport::open(&options.url)?;
-        let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
+        let algorithm = transport.object_format()?;
+        let refs =
+            transport.ls_refs_with_algorithm(&["HEAD", "refs/heads/", "refs/tags/"], algorithm)?;
 
         let mut heads = BTreeMap::new();
         let mut tags = BTreeMap::new();
@@ -325,20 +327,22 @@ impl Repository {
         wants.sort_unstable();
         wants.dedup();
 
-        let algorithm = heads
-            .values()
-            .next()
-            .map(ObjectId::algorithm)
-            .or_else(|| tags.values().next().map(ObjectId::algorithm))
-            .unwrap_or_default();
-        if algorithm != cvx_object::HashAlgorithm::Sha1 {
-            return Err(Error::unsupported(
-                "SHA-256 repositories over HTTPS or SSH (use a local path)",
-            ));
+        for oid in heads.values().chain(tags.values()) {
+            if oid.algorithm() != algorithm {
+                return Err(Error::Message(
+                    "the remote advertised mixed object formats".to_owned(),
+                ));
+            }
         }
-        let response =
-            transport.fetch_full(&wants, options.depth, &[], options.filter.as_deref())?;
-        let objects = cvx_pack::ingest_pack_with_algorithm(&response.pack, algorithm)?;
+        let response = transport.fetch_full_with_algorithm(
+            &wants,
+            options.depth,
+            &[],
+            options.filter.as_deref(),
+            algorithm,
+            false,
+        )?;
+        let objects = cvx_pack::ingest_pack_with_bases(&response.pack, algorithm, |_| Ok(None))?;
 
         let init = Repository::init(InitOptions {
             directory: options.directory.clone(),
@@ -461,12 +465,14 @@ impl Repository {
 
     fn fetch_http(&self, remote_name: &str, url: &str) -> Result<FetchOutcome> {
         let transport = NetworkTransport::open(url)?;
-        let refs = transport.ls_refs(&["HEAD", "refs/heads/", "refs/tags/"])?;
-        if refs.refs.iter().any(|reference| reference.oid.is_sha256()) {
-            return Err(Error::unsupported(
-                "SHA-256 repositories over HTTPS or SSH (use a local path)",
+        let algorithm = transport.object_format()?;
+        if algorithm != self.hash_algorithm() {
+            return Err(Error::Message(
+                "remote and local repositories use different object formats".to_owned(),
             ));
         }
+        let refs =
+            transport.ls_refs_with_algorithm(&["HEAD", "refs/heads/", "refs/tags/"], algorithm)?;
 
         let mut heads = BTreeMap::new();
         let mut tags = BTreeMap::new();
@@ -490,8 +496,17 @@ impl Repository {
 
         let mut copied = 0;
         if !wants.is_empty() {
-            let pack = transport.fetch(&wants)?;
-            for object in cvx_pack::ingest_pack_with_algorithm(&pack, self.hash_algorithm())? {
+            let response = transport.fetch_full_with_algorithm(
+                &wants,
+                None,
+                &[],
+                None,
+                self.hash_algorithm(),
+                true,
+            )?;
+            for object in
+                self.ingest_pack_with_local_bases(&response.pack, self.hash_algorithm())?
+            {
                 if !self.objects().contains(object.oid)? {
                     self.objects().write(object.kind, &object.data)?;
                     copied += 1;
@@ -644,9 +659,6 @@ impl Repository {
         tip: ObjectId,
         url: &str,
     ) -> Result<PushOutcome> {
-        if self.hash_algorithm() != cvx_object::HashAlgorithm::Sha1 {
-            return Err(Error::unsupported("SHA-256 pushes over HTTPS or SSH"));
-        }
         let transport = NetworkTransport::open(url)?;
         let advertisement = transport.discover_receive_pack()?;
         let reference = format!("refs/heads/{branch}");

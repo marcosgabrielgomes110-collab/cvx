@@ -6,7 +6,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use cvx_core::{Error, Result};
 use cvx_credential::{Credential, resolve_for_host};
-use cvx_object::ObjectId;
+use cvx_object::{HashAlgorithm, ObjectId};
 use cvx_protocol::{AGENT, FetchRequest, LsRefsRequest, PktLine, encode_data, flush, parse_all};
 
 const MAX_BODY: u64 = 2 * 1024 * 1024 * 1024;
@@ -138,12 +138,36 @@ impl HttpTransport {
         parse_advertisement_capabilities(&response)
     }
 
+    /// Discovers the server's advertised object format.
+    pub fn object_format(&self) -> Result<HashAlgorithm> {
+        let capabilities = self.discover_upload_pack()?;
+        match capabilities
+            .get("object-format")
+            .and_then(|value| value.as_deref())
+        {
+            Some(format) => {
+                HashAlgorithm::parse(format).map_err(|error| Error::unsupported(error.to_string()))
+            }
+            None => Ok(HashAlgorithm::Sha1),
+        }
+    }
+
     /// Lists references through protocol v2 `ls-refs`.
     pub fn ls_refs(&self, prefixes: &[&str]) -> Result<LsRefsResponse> {
+        self.ls_refs_with_algorithm(prefixes, HashAlgorithm::Sha1)
+    }
+
+    /// Lists references using the negotiated object format.
+    pub fn ls_refs_with_algorithm(
+        &self,
+        prefixes: &[&str],
+        algorithm: HashAlgorithm,
+    ) -> Result<LsRefsResponse> {
         let request = LsRefsRequest {
             ref_prefixes: prefixes.iter().map(|prefix| (*prefix).to_owned()).collect(),
             symrefs: true,
             peel: true,
+            object_format: algorithm,
         };
         let body = request.encode()?;
         let url = format!("{}/git-upload-pack", self.base);
@@ -151,9 +175,7 @@ impl HttpTransport {
         parse_ls_refs(&response)
     }
 
-    /// Fetches a pack for the requested object identifiers.
-    ///
-    /// `thin` is disabled because CVX ingests self-contained packs only.
+    /// Fetches a self-contained pack for the requested object identifiers.
     pub fn fetch(&self, wants: &[ObjectId]) -> Result<Vec<u8>> {
         Ok(self.fetch_full(wants, None, &[], None)?.pack)
     }
@@ -166,17 +188,31 @@ impl HttpTransport {
         shallow: &[ObjectId],
         filter: Option<&str>,
     ) -> Result<FetchResponse> {
+        self.fetch_full_with_algorithm(wants, deepen, shallow, filter, HashAlgorithm::Sha1, false)
+    }
+
+    /// Fetches using the negotiated object format and requested thin-pack mode.
+    pub fn fetch_full_with_algorithm(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponse> {
         let request = FetchRequest {
             wants: wants.to_vec(),
             haves: Vec::new(),
             done: true,
-            thin: false,
+            thin,
             no_progress: true,
             include_tag: true,
             ofs_delta: true,
             deepen,
             shallow: shallow.to_vec(),
             filter: filter.map(str::to_owned),
+            object_format: algorithm,
         };
         let body = request.encode()?;
         let url = format!("{}/git-upload-pack", self.base);
@@ -197,7 +233,26 @@ impl HttpTransport {
             return Err(Error::Message("no ref updates were requested".to_owned()));
         }
         let advertisement = self.discover_receive_pack()?;
+        let algorithm = updates
+            .first()
+            .map(|update| update.new.algorithm())
+            .unwrap_or_default();
+        if algorithm != HashAlgorithm::Sha1 {
+            let advertised = advertisement
+                .capabilities
+                .get("object-format")
+                .and_then(|value| value.as_deref());
+            if advertised != Some(algorithm.name()) {
+                return Err(Error::unsupported(format!(
+                    "the remote does not support {} pushes",
+                    algorithm.name()
+                )));
+            }
+        }
         let mut capabilities = vec!["report-status".to_owned()];
+        if algorithm != HashAlgorithm::Sha1 {
+            capabilities.push(format!("object-format={}", algorithm.name()));
+        }
         if advertisement.capabilities.contains_key("side-band-64k") {
             capabilities.push("side-band-64k".to_owned());
         }
@@ -208,7 +263,7 @@ impl HttpTransport {
 
         let mut body = Vec::new();
         for (index, update) in updates.iter().enumerate() {
-            let old = update.old.unwrap_or(ObjectId::ZERO);
+            let old = update.old.unwrap_or_else(|| ObjectId::zero(algorithm));
             let mut command = format!("{old} {} {}", update.new, update.reference).into_bytes();
             if index == 0 {
                 command.push(0);

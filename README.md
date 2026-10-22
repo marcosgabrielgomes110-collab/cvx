@@ -10,11 +10,12 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: 0.6.0 release.** The local core, history editing, maintenance,
-> merge, HTTPS/SSH transport, GitHub workflows, bare repositories and Phase 5
-> hardening are implemented, including delta packs, property-based fuzzing,
-> crash failpoints, benchmarks, `.gitattributes`/CRLF and local SHA-256
-> repositories. GPG release signing is supported when configured.
+> **Status: 0.7.0 release.** The local core, history editing, maintenance,
+> merge, HTTPS/SSH transport, GitHub workflows, bare repositories, file-backed
+> pack reads and thin-pack ingestion are implemented. This includes delta
+> packs, SHA-256 protocol negotiation, property-based fuzzing, crash failpoints,
+> benchmarks, `.gitattributes`/CRLF and local SHA-256 repositories. GPG release
+> signing is supported when configured.
 >
 > CVX can commit and push this repository directly; Git remains the current
 > control directory and the compatibility test oracle.
@@ -113,15 +114,17 @@ Implemented:
 - SHA-256 repositories for local workflows, packs, index and clones;
 - `fsck`, `gc`, reset, cherry-pick, revert and stash workflows;
 - delta-compressed pack writing and compacting `gc --prune` repacks;
+- file-backed pack reads and thin-pack ingestion during fetch;
+- SHA-256 protocol negotiation over HTTPS and SSH;
 - bare repositories for init, clone, fetch, push, log, fsck and gc;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: pack/index streaming with bounded memory, thin packs,
-shallow fetch updates/unshallow, `--filter` for local paths, automatic
-pagination beyond the first 100 entries, SHA-256 over HTTPS/SSH, submodules,
-LFS, hooks, commit signing, working-tree encodings, diff/merge attribute
-drivers, and fully reproducible cross-toolchain builds.
+Not implemented yet: index/network response streaming with bounded memory,
+thin-pack generation, shallow fetch updates/unshallow, `--filter` for local
+paths, automatic pagination beyond the first 100 entries, submodules, LFS,
+hooks, commit signing, working-tree encodings, diff/merge attribute drivers,
+and fully reproducible cross-toolchain builds.
 
 ## Design decisions
 
@@ -300,6 +303,7 @@ use the file backend).
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete |
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
+| 8 | Streaming pack reads, thin packs and SHA-256 network negotiation | Complete — v0.7.0 |
 
 ## Contributing
 

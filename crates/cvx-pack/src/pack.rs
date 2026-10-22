@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Read;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, Result};
@@ -27,7 +28,8 @@ pub struct PackObject {
 /// A packfile and its index.
 pub struct Pack {
     path: PathBuf,
-    data: Vec<u8>,
+    file: RefCell<File>,
+    file_len: u64,
     index: PackIndex,
     cache: RefCell<HashMap<u64, PackObject>>,
     object_count: usize,
@@ -57,30 +59,37 @@ impl Pack {
         let index = PackIndex::parse(index_bytes, algorithm)?;
 
         let pack_path = idx_path.with_extension("pack");
-        let data = std::fs::read(&pack_path)
+        let file = File::open(&pack_path)
             .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        let file_len = file
+            .metadata()
+            .map_err(|error| Error::io(pack_path.display().to_string(), error))?
+            .len();
 
-        let checksum_len = algorithm.oid_len();
-        if data.len() < PACK_HEADER_LEN + checksum_len {
+        let checksum_len = algorithm.oid_len() as u64;
+        if file_len < PACK_HEADER_LEN as u64 + checksum_len {
             return Err(Error::corrupt(format!(
                 "{} is too short to be a packfile",
                 pack_path.display()
             )));
         }
-        if &data[..4] != b"PACK" {
+
+        let mut header = [0u8; PACK_HEADER_LEN];
+        read_exact_at(&file, 0, &mut header, &pack_path)?;
+        if &header[..4] != b"PACK" {
             return Err(Error::corrupt(format!(
                 "{} has an invalid pack signature",
                 pack_path.display()
             )));
         }
 
-        let version = u32::from_be_bytes(data[4..8].try_into().expect("length checked"));
+        let version = u32::from_be_bytes(header[4..8].try_into().expect("length checked"));
         if version != 2 && version != 3 {
             return Err(Error::unsupported(format!("packfile version {version}")));
         }
 
         let object_count =
-            u32::from_be_bytes(data[8..12].try_into().expect("length checked")) as usize;
+            u32::from_be_bytes(header[8..12].try_into().expect("length checked")) as usize;
         if object_count != index.object_count() {
             return Err(Error::corrupt(format!(
                 "{} has {object_count} objects but its index has {}",
@@ -89,8 +98,18 @@ impl Pack {
             )));
         }
 
-        let pack_checksum = &data[data.len() - checksum_len..];
-        if index.pack_checksum()? != pack_checksum {
+        let payload_len = file_len - checksum_len;
+        let mut trailer = vec![0u8; checksum_len as usize];
+        read_exact_at(&file, payload_len, &mut trailer, &pack_path)?;
+        let mut checksum_file = file
+            .try_clone()
+            .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        checksum_file
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        let computed = crate::checksum::checksum_reader(algorithm, checksum_file.take(payload_len))
+            .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        if computed != trailer || index.pack_checksum()? != trailer {
             return Err(Error::corrupt(format!(
                 "{} does not match its index checksum",
                 pack_path.display()
@@ -99,7 +118,8 @@ impl Pack {
 
         Ok(Self {
             path: pack_path,
-            data,
+            file: RefCell::new(file),
+            file_len,
             index,
             cache: RefCell::new(HashMap::new()),
             object_count,
@@ -177,14 +197,18 @@ impl Pack {
                 }
             }
             7 => {
-                let base_end = data_start + self.algorithm.oid_len();
+                let base_len = self.algorithm.oid_len() as u64;
+                let base_end = data_start
+                    .checked_add(base_len)
+                    .ok_or_else(|| Error::corrupt("pack ref delta overflows"))?;
                 if base_end > self.object_data_end() {
                     return Err(Error::corrupt("pack ref delta is truncated"));
                 }
-                let base_oid =
-                    ObjectId::from_slice(&self.data[data_start..base_end]).map_err(|error| {
-                        Error::corrupt(format!("pack ref delta has an invalid base: {error}"))
-                    })?;
+                let mut base_bytes = vec![0u8; base_len as usize];
+                self.read_bytes(data_start, &mut base_bytes)?;
+                let base_oid = ObjectId::from_slice(&base_bytes).map_err(|error| {
+                    Error::corrupt(format!("pack ref delta has an invalid base: {error}"))
+                })?;
                 let Some(base_offset) = self.index.find(base_oid)? else {
                     return Err(Error::corrupt(format!(
                         "pack ref delta base {base_oid} is not present in the pack"
@@ -208,20 +232,26 @@ impl Pack {
         Ok(object)
     }
 
-    fn read_header(&self, offset: u64) -> Result<(u8, usize, usize)> {
-        let offset =
-            usize::try_from(offset).map_err(|_| Error::corrupt("pack offset is too large"))?;
-        let mut position = offset;
-        let first = self.byte(position)?;
-        position += 1;
+    fn read_header(&self, offset: u64) -> Result<(u8, usize, u64)> {
+        if offset >= self.object_data_end() {
+            return Err(Error::corrupt("pack object is truncated"));
+        }
+        let available = ((self.object_data_end() - offset) as usize).min(16);
+        let mut buffer = vec![0u8; available];
+        self.read_bytes(offset, &mut buffer)?;
 
+        let first = buffer[0];
         let type_code = (first >> 4) & 0x07;
         let mut size = u64::from(first & 0x0f);
         let mut shift = 4u32;
+        let mut position = 1;
         let mut byte = first;
 
         while byte & 0x80 != 0 {
-            byte = self.byte(position)?;
+            let Some(next) = buffer.get(position) else {
+                return Err(Error::corrupt("pack object header is truncated"));
+            };
+            byte = *next;
             position += 1;
             size |= u64::from(byte & 0x7f) << shift;
             shift += 7;
@@ -232,17 +262,27 @@ impl Pack {
 
         let size =
             usize::try_from(size).map_err(|_| Error::corrupt("pack object size is too large"))?;
-        Ok((type_code, size, position))
+        Ok((type_code, size, offset + position as u64))
     }
 
-    fn read_ofs_delta(&self, start: usize) -> Result<(u64, usize)> {
-        let mut position = start;
-        let mut byte = self.byte(position)?;
+    fn read_ofs_delta(&self, start: u64) -> Result<(u64, u64)> {
+        if start >= self.object_data_end() {
+            return Err(Error::corrupt("pack offset delta is truncated"));
+        }
+        let available = ((self.object_data_end() - start) as usize).min(10);
+        let mut buffer = vec![0u8; available];
+        self.read_bytes(start, &mut buffer)?;
+
+        let mut position = 0;
+        let mut byte = buffer[position];
         position += 1;
         let mut distance = u64::from(byte & 0x7f);
 
         while byte & 0x80 != 0 {
-            byte = self.byte(position)?;
+            let Some(next) = buffer.get(position) else {
+                return Err(Error::corrupt("pack offset delta is truncated"));
+            };
+            byte = *next;
             position += 1;
             distance = distance
                 .checked_add(1)
@@ -251,10 +291,10 @@ impl Pack {
                 .ok_or_else(|| Error::corrupt("pack offset delta overflows"))?;
         }
 
-        Ok((distance, position))
+        Ok((distance, start + position as u64))
     }
 
-    fn decompress(&self, start: usize, size: usize) -> Result<Vec<u8>> {
+    fn decompress(&self, start: u64, size: usize) -> Result<Vec<u8>> {
         if size as u64 > MAX_OBJECT_SIZE {
             return Err(Error::corrupt(format!(
                 "packed object is too large ({size} bytes)"
@@ -264,8 +304,11 @@ impl Pack {
             return Err(Error::corrupt("pack object data is truncated"));
         }
 
-        let compressed = &self.data[start..self.object_data_end()];
-        let mut decoder = ZlibDecoder::new(compressed).take(size as u64 + 1);
+        let mut file = File::open(&self.path)
+            .map_err(|error| Error::io(self.path.display().to_string(), error))?;
+        file.seek(SeekFrom::Start(start))
+            .map_err(|error| Error::io(self.path.display().to_string(), error))?;
+        let mut decoder = ZlibDecoder::new(file).take(size as u64 + 1);
         let mut output = Vec::with_capacity(size);
         decoder
             .read_to_end(&mut output)
@@ -280,16 +323,30 @@ impl Pack {
         Ok(output)
     }
 
-    fn byte(&self, position: usize) -> Result<u8> {
-        if position >= self.object_data_end() {
-            return Err(Error::corrupt("pack object is truncated"));
-        }
-        Ok(self.data[position])
+    fn read_bytes(&self, offset: u64, buffer: &mut [u8]) -> Result<()> {
+        let mut file = self.file.borrow_mut();
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|error| Error::io(self.path.display().to_string(), error))?;
+        file.read_exact(buffer)
+            .map_err(|error| Error::io(self.path.display().to_string(), error))
     }
 
-    fn object_data_end(&self) -> usize {
-        self.data.len().saturating_sub(self.algorithm.oid_len())
+    fn object_data_end(&self) -> u64 {
+        self.file_len
+            .saturating_sub(self.algorithm.oid_len() as u64)
     }
+}
+
+fn read_exact_at(file: &File, offset: u64, buffer: &mut [u8], path: &Path) -> Result<()> {
+    let mut handle = file
+        .try_clone()
+        .map_err(|error| Error::io(path.display().to_string(), error))?;
+    handle
+        .seek(SeekFrom::Start(offset))
+        .map_err(|error| Error::io(path.display().to_string(), error))?;
+    handle
+        .read_exact(buffer)
+        .map_err(|error| Error::io(path.display().to_string(), error))
 }
 
 #[cfg(test)]

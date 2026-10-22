@@ -19,7 +19,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Index v2 | Yes | Yes | Default write format |
 | Index v3/v4 | Yes | No | Read path; writes v2, or v3 when extended flags require it |
 | Reflogs | Yes | Yes | Commits and branch switches |
-| SHA-256 repositories | Yes | Yes | Local workflows, packs, index and clones; HTTPS/SSH not yet |
+| SHA-256 repositories | Yes | Yes | Local workflows, packs, index, clones and protocol-v2 HTTPS/SSH negotiation |
 | Reftable storage | No | No | Detected and rejected |
 | Bare repositories | Yes | Yes | Init/clone, fetch/push, log, tag, fsck and gc; worktree commands fail explicitly |
 | Linked worktrees | No | No | Rejected during discovery |
@@ -89,14 +89,16 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Git reads CVX repository | Yes, with `--git-dir=.cvx` |
 | `git fsck` on CVX repository | Yes |
 | CVX `fsck`, `gc`, reset, cherry-pick, revert and stash | Yes |
+| File-backed pack reads | Yes | Objects decompressed on demand |
+| SHA-256 over HTTPS/SSH | Yes | Protocol-v2 object-format negotiation |
 | Bare repositories | Yes | Git reads/writes refs and packs |
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
 | Switch branches in a packed repository | Yes |
 | Merge commits and conflicted index stages | Yes |
 | Annotated and lightweight tags | Yes |
-| Pack writing | Yes | Complete objects and version-2 indexes |
-| Pack ingestion | Yes | Self-contained packs; thin packs are rejected |
+| Pack writing | Yes | Offset deltas and version-2 indexes |
+| Pack ingestion | Yes | Thin-pack bases are completed from the local object database |
 | Clone / fetch / push over local paths | Yes | `file://` and filesystem paths |
 | Clone / fetch / push over HTTPS | Yes | Protocol v2 fetch, receive-pack push |
 | Clone / fetch / push over SSH | Yes | System OpenSSH, keys and `ssh-agent` |

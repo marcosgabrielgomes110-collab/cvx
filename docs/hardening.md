@@ -31,6 +31,7 @@ comma-separated failpoint name. Production runs leave it unset.
 | `ref.before-publish` | Ref lock written, not renamed |
 | `pack.before-index` | Pack written, index missing |
 | `stash.before-reset` | Stash ref written, worktree reset not started |
+| `gc.before-prune` | New pack verified, old packs and loose objects not removed |
 
 Recovery tests live in `crates/cvx-cli/tests/recovery.rs` and verify:
 
@@ -39,6 +40,8 @@ Recovery tests live in `crates/cvx-cli/tests/recovery.rs` and verify:
 - staged changes survive and the operation can be retried;
 - an interrupted stash keeps its saved entry and can be applied later;
 - an interrupted hard reset leaves `HEAD` unchanged and can be retried;
+- an interrupted `gc --prune` leaves the repository usable and can be retried;
+- concurrent `add` processes either serialize or fail one writer explicitly;
 - an orphan pack without an index is ignored by repository discovery.
 
 Example:
@@ -92,6 +95,16 @@ as `ORIG_HEAD`.
 Bare discovery, fetch, push, log, tag, fsck and gc work normally. Commands that
 need a worktree fail explicitly instead of writing inside the repository.
 
+## Streaming and thin packs
+
+`Pack` is file-backed: it keeps the index and a small decoded-object cache,
+while object payloads are read and decompressed from the `.pack` file on
+demand. Pack checksums are verified incrementally.
+
+Fetch requests thin packs. Ref-delta bases missing from the incoming pack are
+resolved from the local object database; an unknown base is still rejected
+explicitly.
+
 ## Release verification and signing
 
 Release workflows verify every checksum before publishing. When the
@@ -101,7 +114,7 @@ GPG and the `.asc` files are published alongside the checksums.
 
 ## Remaining hardening
 
-- pack and index streaming with bounded memory;
-- SHA-256 over HTTPS/SSH and thin-pack generation;
+- index and network response streaming with bounded memory;
+- thin-pack generation for push and live SHA-256 server integration tests;
 - fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.

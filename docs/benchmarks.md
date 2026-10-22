@@ -42,7 +42,16 @@ Criterion benchmarks are implemented for the engine hot paths:
 | `cvx-diff` | unified diff and diffstat | 1k, 10k, 50k lines |
 
 Repository-level benchmarks are included for 10k files; set
-`CVX_BENCH_LARGE=1` to also run the 100k-file scenario.
+`CVX_BENCH_LARGE=1` to also run the 100k-file scenario. `scripts/bench-large.sh`
+adds an optional address-space ceiling so large runs fail loudly instead of
+silently exhausting memory:
+
+```console
+$ CVX_BENCH_LARGE=1 CVX_BENCH_MEMORY_KB=4194304 scripts/bench-large.sh
+```
+
+Pack reads are file-backed: `Pack` keeps only the index and a small object
+cache in memory, and decompresses objects on demand from the `.pack` file.
 
 | Operation | Data size | Status |
 |---|---:|---|

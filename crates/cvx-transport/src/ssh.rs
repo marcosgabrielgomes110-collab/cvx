@@ -2,9 +2,10 @@ use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use cvx_core::{Error, Result};
-use cvx_object::ObjectId;
+use cvx_object::{HashAlgorithm, ObjectId};
 use cvx_protocol::{
-    FetchRequest, LsRefsRequest, PktLine, encode_data, encode_text, flush, parse_all, read_from,
+    FetchRequest, LsRefsRequest, PktLine, encode_data, encode_text, flush, parse_all,
+    parse_capability_packets, read_from,
 };
 
 use crate::http::{
@@ -74,14 +75,34 @@ impl SshTransport {
         &self.original
     }
 
+    /// Discovers the negotiated object format.
+    pub fn object_format(&self) -> Result<HashAlgorithm> {
+        let mut session = self.spawn("git-upload-pack")?;
+        session.handshake()?;
+        let algorithm = session.algorithm;
+        session.close_stdin();
+        let _ = session.finish();
+        Ok(algorithm)
+    }
+
     /// Lists references using protocol v2 `ls-refs`.
     pub fn ls_refs(&self, prefixes: &[&str]) -> Result<LsRefsResponse> {
+        self.ls_refs_with_algorithm(prefixes, HashAlgorithm::Sha1)
+    }
+
+    /// Lists references using the negotiated object format.
+    pub fn ls_refs_with_algorithm(
+        &self,
+        prefixes: &[&str],
+        algorithm: HashAlgorithm,
+    ) -> Result<LsRefsResponse> {
         let mut session = self.spawn("git-upload-pack")?;
         session.handshake()?;
         let request = LsRefsRequest {
             ref_prefixes: prefixes.iter().map(|prefix| (*prefix).to_owned()).collect(),
             symrefs: true,
             peel: true,
+            object_format: algorithm,
         };
         session.write(&request.encode()?)?;
         let response = session.read_until_flush()?;
@@ -103,19 +124,33 @@ impl SshTransport {
         shallow: &[ObjectId],
         filter: Option<&str>,
     ) -> Result<FetchResponse> {
+        self.fetch_full_with_algorithm(wants, deepen, shallow, filter, HashAlgorithm::Sha1, false)
+    }
+
+    /// Fetches using the negotiated object format and requested thin-pack mode.
+    pub fn fetch_full_with_algorithm(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponse> {
         let mut session = self.spawn("git-upload-pack")?;
         session.handshake()?;
         let request = FetchRequest {
             wants: wants.to_vec(),
             haves: Vec::new(),
             done: true,
-            thin: false,
+            thin,
             no_progress: true,
             include_tag: true,
             ofs_delta: true,
             deepen,
             shallow: shallow.to_vec(),
             filter: filter.map(str::to_owned),
+            object_format: algorithm,
         };
         session.write(&request.encode()?)?;
         session.close_stdin();
@@ -142,7 +177,26 @@ impl SshTransport {
         let advertisement_bytes = session.read_until_flush()?;
         let advertisement = parse_receive_advertisement(&advertisement_bytes)?;
 
+        let algorithm = updates
+            .first()
+            .map(|update| update.new.algorithm())
+            .unwrap_or_default();
+        if algorithm != HashAlgorithm::Sha1 {
+            let advertised = advertisement
+                .capabilities
+                .get("object-format")
+                .and_then(|value| value.as_deref());
+            if advertised != Some(algorithm.name()) {
+                return Err(Error::unsupported(format!(
+                    "the remote does not support {} pushes",
+                    algorithm.name()
+                )));
+            }
+        }
         let mut capabilities = vec!["report-status".to_owned()];
+        if algorithm != HashAlgorithm::Sha1 {
+            capabilities.push(format!("object-format={}", algorithm.name()));
+        }
         if advertisement.capabilities.contains_key("side-band-64k") {
             capabilities.push("side-band-64k".to_owned());
         }
@@ -153,7 +207,7 @@ impl SshTransport {
 
         let mut body = Vec::new();
         for (index, update) in updates.iter().enumerate() {
-            let old = update.old.unwrap_or(ObjectId::ZERO);
+            let old = update.old.unwrap_or_else(|| ObjectId::zero(algorithm));
             let mut command = format!("{old} {} {}", update.new, update.reference).into_bytes();
             if index == 0 {
                 command.push(0);
@@ -209,6 +263,7 @@ impl SshTransport {
             child,
             stdin: Some(stdin),
             stdout,
+            algorithm: HashAlgorithm::Sha1,
         })
     }
 }
@@ -217,6 +272,7 @@ struct SshSession {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: ChildStdout,
+    algorithm: HashAlgorithm,
 }
 
 impl SshSession {
@@ -243,18 +299,32 @@ impl SshSession {
         // explicit version packet for servers that expect the stateful form.
         let response = self.read_until_flush()?;
         if has_version_2(&response)? {
+            self.capture_object_format(&response)?;
             return Ok(());
         }
 
         self.write(&encode_text("version=2\n")?)?;
         let response = self.read_until_flush()?;
         if has_version_2(&response)? {
+            self.capture_object_format(&response)?;
             Ok(())
         } else {
             Err(Error::unsupported(
                 "the SSH server does not support Git protocol v2",
             ))
         }
+    }
+
+    fn capture_object_format(&mut self, response: &[u8]) -> Result<()> {
+        let capabilities = parse_capability_packets(response)?;
+        if let Some(format) = capabilities
+            .get("object-format")
+            .and_then(|value| value.as_deref())
+        {
+            self.algorithm = HashAlgorithm::parse(format)
+                .map_err(|error| Error::unsupported(error.to_string()))?;
+        }
+        Ok(())
     }
 
     fn read_until_flush(&mut self) -> Result<Vec<u8>> {
