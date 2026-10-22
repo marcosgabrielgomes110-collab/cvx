@@ -45,7 +45,10 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --all-targets --locked
+        # Criterion bench targets use harness = false and would actually run
+        # their benchmark bodies under --all-targets. Compile benches in the
+        # Clippy step instead, and run only test targets here.
+        run: cargo test --workspace --lib --bins --tests --locked
 
       - name: Check documentation
         run: cargo doc --workspace --no-deps --locked
