@@ -105,6 +105,17 @@ Fetch requests thin packs. Ref-delta bases missing from the incoming pack are
 resolved from the local object database; an unknown base is still rejected
 explicitly.
 
+## Hooks and lock contention
+
+Commit hooks run in repository order: `pre-commit`, then `commit-msg` with
+`COMMIT_EDITMSG`, then `post-commit` after the ref update. `pre-push` receives
+the remote name, URL and ref update on stdin. Missing or non-executable hooks
+are skipped.
+
+`CVX_LOCK_TIMEOUT_MS` makes index and ref lock acquisition wait before failing.
+The default is zero. Diagnostics identify the lock path and explain how to
+remove a stale lock safely.
+
 ## Release verification and signing
 
 Release workflows verify every checksum before publishing. When the
@@ -116,5 +127,6 @@ GPG and the `.asc` files are published alongside the checksums.
 
 - index and network response streaming with bounded memory;
 - thin-pack generation for push and live SHA-256 server integration tests;
+- stale-lock recovery automation and multi-process soak tests;
 - fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.

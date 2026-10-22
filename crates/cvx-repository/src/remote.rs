@@ -603,6 +603,7 @@ impl Repository {
             ));
         }
         let old = remote.refs().read_ref(&reference)?;
+        self.run_pre_push(remote_name, &url, &reference, tip, old)?;
 
         let objects = self.reachable_objects(&[tip])?;
         let mut copied = 0;
@@ -668,6 +669,7 @@ impl Repository {
             .find(|remote| remote.name == reference)
             .map(|remote| remote.oid);
 
+        self.run_pre_push(remote_name, url, &reference, tip, old)?;
         if let Some(old) = old
             && old != tip
             && !options.force
@@ -707,6 +709,23 @@ impl Repository {
             new: tip,
             objects: objects.len(),
         })
+    }
+
+    fn run_pre_push(
+        &self,
+        remote_name: &str,
+        url: &str,
+        reference: &str,
+        tip: ObjectId,
+        old: Option<ObjectId>,
+    ) -> Result<()> {
+        let zero = ObjectId::zero(self.hash_algorithm());
+        let input = format!("{reference} {tip} {reference} {}\n", old.unwrap_or(zero));
+        self.run_hook(
+            "pre-push",
+            &[remote_name.to_owned(), url.to_owned()],
+            Some(input.as_bytes()),
+        )
     }
 
     fn append_config(&self, text: &str) -> Result<()> {

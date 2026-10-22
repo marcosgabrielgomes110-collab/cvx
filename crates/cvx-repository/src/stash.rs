@@ -169,6 +169,8 @@ impl Repository {
         self.reset(&ResetOptions {
             target: "HEAD".to_owned(),
             mode: ResetMode::Hard,
+            paths: Vec::new(),
+            cwd: self.work_tree().to_path_buf(),
         })?;
 
         Ok(StashOutcome { oid, message })

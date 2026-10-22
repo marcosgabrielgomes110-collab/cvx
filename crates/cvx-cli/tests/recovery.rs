@@ -233,3 +233,23 @@ fn concurrent_add_processes_leave_a_consistent_index() {
     env.cvx().arg("fsck").assert().success();
     env.assert_git_cvx_ok(&["fsck", "--strict"]);
 }
+
+#[test]
+fn index_lock_timeout_reports_stale_lock_diagnostics() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "content\n");
+    std::fs::write(env.path(".cvx/index.lock"), b"").unwrap();
+
+    env.cvx()
+        .env("CVX_LOCK_TIMEOUT_MS", "100")
+        .args(["add", "."])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "remove the lock if no process is active",
+        ));
+
+    std::fs::remove_file(env.path(".cvx/index.lock")).unwrap();
+    env.cvx().args(["add", "."]).assert().success();
+}

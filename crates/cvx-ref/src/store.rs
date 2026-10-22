@@ -188,20 +188,16 @@ impl RefStore {
             cvx_core::fs::ensure_dir(parent)?;
         }
 
-        let lock = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-            .map_err(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    Error::Message(format!(
-                        "unable to create '{}': another process may be updating this reference",
-                        lock_path.display()
-                    ))
-                } else {
-                    Error::io(lock_path.display().to_string(), error)
-                }
-            })?;
+        let lock = cvx_core::fs::create_lock_file(&lock_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "unable to create '{}': another process may be updating this reference; remove the lock if no process is active",
+                    lock_path.display()
+                ))
+            } else {
+                Error::io(lock_path.display().to_string(), error)
+            }
+        })?;
 
         let current = match self.read_ref(name) {
             Ok(current) => current,
@@ -320,20 +316,16 @@ impl RefStore {
             cvx_core::fs::ensure_dir(parent)?;
         }
 
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-            .map_err(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    Error::Message(format!(
-                        "unable to create '{}': another process may be updating this reference",
-                        lock_path.display()
-                    ))
-                } else {
-                    Error::io(lock_path.display().to_string(), error)
-                }
-            })?;
+        let mut file = cvx_core::fs::create_lock_file(&lock_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "unable to create '{}': another process may be updating this reference; remove the lock if no process is active",
+                    lock_path.display()
+                ))
+            } else {
+                Error::io(lock_path.display().to_string(), error)
+            }
+        })?;
 
         let current = match self.read_ref(name) {
             Ok(current) => current,

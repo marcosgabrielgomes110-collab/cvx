@@ -15,7 +15,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Production readiness: streaming, concurrency, security, Git completeness, packaging | Planned |
+| 9 | Production readiness: streaming, concurrency, security, Git completeness, packaging | In progress — v0.8.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -161,15 +161,25 @@ Remaining:
 - lock timeout/stale-lock recovery and multi-process soak tests;
 - hooks, commit signing, submodules and LFS.
 
-## Phase 9 — production readiness (planned)
+## Phase 9 — production readiness (in progress)
 
 The 0.7.x series is a beta with strong local and GitHub workflows, but it is
 not yet production-grade for teams, CI fleets or large repositories. The
 following work is required before a 1.0 production declaration.
 
+Implemented in v0.8.0:
+
+- commit lifecycle hooks (`pre-commit`, `commit-msg`, `post-commit`) and
+  `pre-push`, with `core.hooksPath`;
+- `CVX_LOCK_TIMEOUT_MS` for index/ref lock contention and clearer stale-lock
+  diagnostics;
+- `cvx reset <REV> -- <PATH>...` for pathspec index resets;
+- integration coverage for hook rejection, message rewriting, pre-push
+  rejection and lock timeout diagnostics.
+
 ### P0 — data safety and concurrency
 
-- lock timeout, stale-lock recovery and actionable diagnostics;
+- stale-lock automatic recovery (timeout and diagnostics are implemented);
 - multi-process soak tests for index, refs, packs and `gc`;
 - transactional multi-reference push (all refs or none);
 - crash-consistency tests for pack deletion, loose-object pruning and
@@ -219,13 +229,13 @@ following work is required before a 1.0 production declaration.
 
 ### P1 — Git compatibility completeness
 
-- hooks, including `pre-commit`, `commit-msg`, `post-commit` and `pre-push`;
+- hooks beyond commit lifecycle and pre-push (`prepare-commit-msg`, `pre-merge-commit`, `post-checkout`, `post-merge`);
 - commit and tag signing, and verification;
 - submodules, Git LFS, reftable, multi-pack index and alternates;
 - linked worktrees and pack v3/index v4 writing;
 - working-tree encodings and diff/merge attribute drivers;
 - merge rename detection and directory/file conflict resolution;
-- `reset` pathspecs;
+- remaining reset edge cases with pathspecs (implemented for index resets);
 - `cherry-pick`/`revert` conflict state with `--continue`/`--abort` and author
   preservation;
 - stash support for untracked files and index restoration.

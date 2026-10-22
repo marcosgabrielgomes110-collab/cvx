@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.7.1 work._
+_Post-0.8.0 work._
+
+## [0.8.0] - 2026-10-22
+
+### Added
+
+- Repository hooks: `pre-commit`, `commit-msg`, `post-commit` and `pre-push`,
+  with `core.hooksPath` support and hook input for push.
+- `CVX_LOCK_TIMEOUT_MS` for index and ref lock contention, with clearer stale
+  lock diagnostics.
+- `cvx reset <REV> -- <PATH>...` updates selected index entries without moving
+  HEAD or touching the worktree.
+- Integration tests for hook acceptance/rejection, message rewriting, pre-push
+  rejection and lock timeout diagnostics.
+
+### Changed
+
+- `reset` now documents and rejects `--soft`/`--hard` with pathspecs.
+- Hook execution is explicit and disabled when a hook is missing or not
+  executable on Unix.
 
 ## [0.7.1] - 2026-10-22
 

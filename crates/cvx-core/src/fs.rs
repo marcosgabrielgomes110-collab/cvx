@@ -1,8 +1,8 @@
 use std::fs;
-#[cfg(unix)]
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use crate::error::{Error, IoResultExt, Result};
 
@@ -65,6 +65,35 @@ pub fn write_atomic(path: &Path, contents: &[u8], mode: Option<u32>) -> Result<(
 
     sync_parent(path)?;
     Ok(())
+}
+
+/// Creates an exclusive lock file, optionally waiting for a concurrent owner.
+///
+/// `CVX_LOCK_TIMEOUT_MS` sets the wait budget. The default is zero, preserving
+/// the immediate-failure behavior used by tests and scripts.
+pub fn create_lock_file(path: &Path) -> std::io::Result<File> {
+    let timeout = std::env::var("CVX_LOCK_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .unwrap_or_default();
+    let deadline = Instant::now().checked_add(timeout);
+
+    loop {
+        match OpenOptions::new().write(true).create_new(true).open(path) {
+            Ok(file) => return Ok(file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let Some(deadline) = deadline else {
+                    return Err(error);
+                };
+                if Instant::now() >= deadline {
+                    return Err(error);
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 /// Removes a directory tree if it exists.

@@ -71,13 +71,34 @@ impl Repository {
             parents.push(merge_head);
         }
 
+        let mut messages = options.messages;
+        if merge_head.is_none() {
+            self.run_hook("pre-commit", &[], None)?;
+            let message_path = self.control_dir().join("COMMIT_EDITMSG");
+            cvx_core::fs::write_atomic(
+                &message_path,
+                messages.join("\n\n").as_bytes(),
+                Some(0o644),
+            )?;
+            self.run_hook(
+                "commit-msg",
+                &[message_path.to_string_lossy().into_owned()],
+                None,
+            )?;
+            let edited = std::fs::read_to_string(&message_path)
+                .map_err(|error| Error::io(message_path.display().to_string(), error))?;
+            messages = vec![edited];
+        }
+
         let outcome = self.commit_with_parents(
-            options.messages,
+            messages,
             parents,
             options.allow_empty || merge_head.is_some(),
         )?;
         if merge_head.is_some() {
             self.clear_merge_state()?;
+        } else {
+            let _ = self.run_hook("post-commit", &[], None);
         }
         Ok(outcome)
     }

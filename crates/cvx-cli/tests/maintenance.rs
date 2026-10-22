@@ -279,3 +279,35 @@ fn stash_pop_restores_changes_and_no_changes_is_an_error() {
     assert!(stdout(&list).contains("first"));
     assert!(!stdout(&list).contains("second"));
 }
+
+#[test]
+fn reset_pathspec_updates_only_selected_index_entries() {
+    let env = TestEnv::new();
+    env.cvx().arg("init").assert().success();
+    env.write("a.txt", "one\n");
+    env.write("b.txt", "one\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "base"]).assert().success();
+    env.write("a.txt", "two\n");
+    env.write("b.txt", "two\n");
+    env.cvx().args(["add", "."]).assert().success();
+
+    env.cvx()
+        .args(["reset", "--", "a.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Reset 1 index paths"));
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(stdout(&status).trim_end(), " M a.txt\nM  b.txt");
+
+    env.cvx()
+        .args(["reset", "--hard", "--", "a.txt"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pathspecs"));
+    env.cvx()
+        .args(["reset", "--", "missing.txt"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("did not match"));
+}

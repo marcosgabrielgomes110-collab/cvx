@@ -18,9 +18,15 @@ pub fn run(args: ResetArgs) -> Result<()> {
     let outcome = repository.reset(&ResetOptions {
         target: args.target.clone(),
         mode,
+        paths: args.paths.clone(),
+        cwd: cwd.clone(),
     })?;
 
     let short = outcome.target.short(7);
+    if !args.paths.is_empty() {
+        println!("Reset {} index paths to {short}", outcome.updated_paths);
+        return Ok(());
+    }
     if mode == ResetMode::Hard {
         let subject = repository
             .read_commit(outcome.target)

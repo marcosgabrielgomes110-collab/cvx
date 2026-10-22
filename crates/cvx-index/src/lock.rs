@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -24,20 +24,16 @@ impl IndexLock {
         let lock_path = git_dir.join("index.lock");
         let index_path = git_dir.join("index");
 
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-            .map_err(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    Error::Message(format!(
-                        "unable to create '{}': another CVX process may be running",
-                        lock_path.display()
-                    ))
-                } else {
-                    Error::io(lock_path.display().to_string(), error)
-                }
-            })?;
+        let file = cvx_core::fs::create_lock_file(&lock_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "unable to create '{}': another CVX process may be running; remove the lock if no process is active",
+                    lock_path.display()
+                ))
+            } else {
+                Error::io(lock_path.display().to_string(), error)
+            }
+        })?;
 
         Ok(Self {
             lock_path,

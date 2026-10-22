@@ -195,7 +195,11 @@ impl Repository {
             .collect())
     }
 
-    fn resolve_restore_pathspecs(&self, cwd: &Path, paths: &[PathBuf]) -> Result<Vec<Vec<u8>>> {
+    pub(crate) fn resolve_restore_pathspecs(
+        &self,
+        cwd: &Path,
+        paths: &[PathBuf],
+    ) -> Result<Vec<Vec<u8>>> {
         let work_tree = self.work_tree();
         let mut specs = Vec::new();
 
@@ -221,7 +225,7 @@ impl Repository {
     }
 }
 
-fn path_matches(path: &[u8], spec: &[u8]) -> bool {
+pub(crate) fn path_matches(path: &[u8], spec: &[u8]) -> bool {
     if spec.is_empty() {
         return true;
     }

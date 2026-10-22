@@ -14,6 +14,7 @@ mod commit;
 mod diff;
 mod fsck;
 mod gc;
+mod hooks;
 mod init;
 mod log;
 mod merge;

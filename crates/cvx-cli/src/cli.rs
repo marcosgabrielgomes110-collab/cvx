@@ -175,6 +175,10 @@ pub struct ResetArgs {
     /// Move HEAD, reset the index and overwrite the worktree.
     #[arg(long, conflicts_with_all = ["soft", "mixed"])]
     pub hard: bool,
+
+    /// Pathspecs whose index entries should be reset.
+    #[arg(last = true, value_name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }
 
 /// Arguments for `cvx init`.
