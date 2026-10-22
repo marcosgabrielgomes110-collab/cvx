@@ -15,7 +15,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Production readiness: streaming, concurrency, security, Git completeness, packaging | In progress — v0.8.0 |
+| 9 | Production readiness: streaming, concurrency, security, Git completeness, packaging | In progress — v0.8.1 |
 
 ## Phase 2B — merge and history workflows
 
@@ -167,7 +167,7 @@ The 0.7.x series is a beta with strong local and GitHub workflows, but it is
 not yet production-grade for teams, CI fleets or large repositories. The
 following work is required before a 1.0 production declaration.
 
-Implemented in v0.8.0:
+Implemented in v0.8.1:
 
 - commit lifecycle hooks (`pre-commit`, `commit-msg`, `post-commit`) and
   `pre-push`, with `core.hooksPath`;

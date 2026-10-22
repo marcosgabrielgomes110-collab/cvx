@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.8.0 work._
+_Post-0.8.1 work._
+
+## [0.8.1] - 2026-10-22
+
+### Fixed
+
+- Pathspec resolution now canonicalizes the current directory, fixing
+  `cvx reset -- <PATH>` and `cvx restore` on Windows paths with extended-length
+  prefixes.
 
 ## [0.8.0] - 2026-10-22
 

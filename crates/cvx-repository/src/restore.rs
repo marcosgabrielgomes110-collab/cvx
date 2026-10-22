@@ -200,11 +200,12 @@ impl Repository {
         cwd: &Path,
         paths: &[PathBuf],
     ) -> Result<Vec<Vec<u8>>> {
+        let cwd = std::fs::canonicalize(cwd).path_context(cwd)?;
         let work_tree = self.work_tree();
         let mut specs = Vec::new();
 
         for path in paths {
-            let absolute = lexical_absolute(cwd, path);
+            let absolute = lexical_absolute(&cwd, path);
             if !absolute.starts_with(work_tree) {
                 return Err(Error::Message(format!(
                     "pathspec '{}' is outside the repository",
