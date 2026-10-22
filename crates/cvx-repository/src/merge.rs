@@ -434,7 +434,7 @@ impl Repository {
         }
     }
 
-    fn write_clean(
+    pub(crate) fn write_clean(
         &self,
         index: &mut Index,
         path: &[u8],
@@ -548,7 +548,7 @@ impl Repository {
         }
     }
 
-    fn blob_content(&self, oid: ObjectId) -> Result<Vec<u8>> {
+    pub(crate) fn blob_content(&self, oid: ObjectId) -> Result<Vec<u8>> {
         let object = self.read_object(oid)?;
         if object.kind != ObjectKind::Blob {
             return Err(Error::corrupt(format!(

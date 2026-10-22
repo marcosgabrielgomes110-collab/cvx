@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.4.0 work._
+_Post-0.5.0 work._
+
+## [0.5.0] - 2026-10-22
+
+### Added
+
+- `cvx fsck` for references, objects, trees, tags, index entries and dangling
+  objects.
+- `cvx gc` with optional `--prune` to consolidate loose objects into packs.
+- `cvx reset --soft|--mixed|--hard` with `ORIG_HEAD` and reflog updates.
+- Revision ancestry suffixes such as `HEAD~2` and `main^`.
+- `cvx cherry-pick` and `cvx revert` for clean single-parent commits.
+- `cvx stash push|list|apply|pop|drop` for tracked changes.
+
+### Changed
+
+- `git fsck --strict` remains green after reset, cherry-pick, revert, stash and
+  garbage collection.
 
 ## [0.4.0] - 2026-10-21
 

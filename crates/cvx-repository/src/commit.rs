@@ -148,7 +148,7 @@ impl Repository {
         })
     }
 
-    fn build_tree(&self, index: &cvx_index::Index) -> Result<ObjectId> {
+    pub(crate) fn build_tree(&self, index: &cvx_index::Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
 
         for entry in index.entries() {

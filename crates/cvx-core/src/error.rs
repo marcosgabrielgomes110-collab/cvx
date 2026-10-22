@@ -62,6 +62,13 @@ pub enum Error {
         message: String,
     },
 
+    /// Repository integrity checks found problems.
+    #[error("{message}")]
+    Integrity {
+        /// Human-readable explanation.
+        message: String,
+    },
+
     /// A configuration file could not be parsed or interpreted.
     #[error("configuration error in {path}: {message}")]
     Config {
@@ -133,10 +140,19 @@ impl Error {
         }
     }
 
+    /// Creates a repository-integrity error.
+    pub fn integrity(message: impl Into<String>) -> Self {
+        Self::Integrity {
+            message: message.into(),
+        }
+    }
+
     /// Returns the process exit code associated with this error.
     pub fn exit_code(&self) -> u8 {
         match self {
-            Self::NothingToCommit { .. } | Self::MergeConflicts { .. } => 1,
+            Self::NothingToCommit { .. } | Self::MergeConflicts { .. } | Self::Integrity { .. } => {
+                1
+            }
             _ => 128,
         }
     }

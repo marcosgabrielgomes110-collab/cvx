@@ -58,6 +58,15 @@ pub enum Command {
     /// Show changes between commits, the index and the worktree.
     Diff(DiffArgs),
 
+    /// Verify repository integrity.
+    Fsck(FsckArgs),
+
+    /// Consolidate loose objects into a pack.
+    Gc(GcArgs),
+
+    /// Move HEAD and optionally reset the index and worktree.
+    Reset(ResetArgs),
+
     /// Restore index entries or worktree files.
     Restore(RestoreArgs),
 
@@ -73,11 +82,99 @@ pub enum Command {
     /// Join another branch's history into the current branch.
     Merge(MergeArgs),
 
+    /// Apply a commit on top of the current branch.
+    CherryPick(PickArgs),
+
+    /// Revert a commit on top of the current branch.
+    Revert(PickArgs),
+
+    /// Save and restore local changes.
+    Stash(StashArgs),
+
     /// Create or list tags.
     Tag(TagArgs),
 
     /// Print version and format information.
     Version,
+}
+
+/// Arguments for `cvx stash`.
+#[derive(Debug, clap::Args)]
+pub struct StashArgs {
+    /// Stash operation to perform.
+    #[command(subcommand)]
+    pub action: StashAction,
+}
+
+/// Stash subcommands.
+#[derive(Debug, Subcommand)]
+pub enum StashAction {
+    /// Save tracked index and worktree changes.
+    Push(StashPushArgs),
+    /// List stash entries.
+    List,
+    /// Apply the newest stash without removing it.
+    Apply,
+    /// Apply and remove the newest stash.
+    Pop,
+    /// Remove the newest stash.
+    Drop,
+}
+
+/// Arguments for `cvx stash push`.
+#[derive(Debug, clap::Args)]
+pub struct StashPushArgs {
+    /// Stash message.
+    #[arg(short, long, value_name = "MESSAGE")]
+    pub message: Option<String>,
+}
+
+/// Arguments for `cvx cherry-pick` and `cvx revert`.
+#[derive(Debug, clap::Args)]
+pub struct PickArgs {
+    /// Commit or revision to apply.
+    #[arg(value_name = "REVISION")]
+    pub revision: String,
+}
+
+/// Arguments for `cvx fsck`.
+#[derive(Debug, clap::Args)]
+pub struct FsckArgs {
+    /// Treat warnings as errors.
+    #[arg(long)]
+    pub strict: bool,
+}
+
+/// Arguments for `cvx gc`.
+#[derive(Debug, clap::Args)]
+pub struct GcArgs {
+    /// Delete unreachable loose objects.
+    #[arg(long)]
+    pub prune: bool,
+
+    /// Suppress the summary.
+    #[arg(short, long)]
+    pub quiet: bool,
+}
+
+/// Arguments for `cvx reset`.
+#[derive(Debug, clap::Args)]
+pub struct ResetArgs {
+    /// Commit or revision to reset to.
+    #[arg(default_value = "HEAD")]
+    pub target: String,
+
+    /// Move HEAD only; keep the index and worktree.
+    #[arg(long, conflicts_with_all = ["mixed", "hard"])]
+    pub soft: bool,
+
+    /// Move HEAD and reset the index; keep the worktree (default).
+    #[arg(long, conflicts_with_all = ["soft", "hard"])]
+    pub mixed: bool,
+
+    /// Move HEAD, reset the index and overwrite the worktree.
+    #[arg(long, conflicts_with_all = ["soft", "mixed"])]
+    pub hard: bool,
 }
 
 /// Arguments for `cvx init`.

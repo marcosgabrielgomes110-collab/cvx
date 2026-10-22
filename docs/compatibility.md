@@ -51,7 +51,9 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `cvx status` rename detection | Implemented | Staged renames (HEAD to index) |
 | `cvx diff` non-UTF-8 text | Limited | Non-UTF-8 text is rendered lossily |
 | `cvx diff` combined conflict diff | No | Diff with unmerged entries is rejected |
-| `cvx reset` / `revert` / `cherry-pick` | Not implemented | Planned later |
+| `cvx reset` / `revert` / `cherry-pick` | Implemented | Reset modes; clean single-parent picks and reverts |
+| `cvx stash` | Implemented | `push`, `list`, `apply`, `pop`, `drop` for tracked changes |
+| `cvx fsck` / `cvx gc` | Implemented | Integrity checks and loose-object packing |
 | `.gitignore` | Implemented | Worktree walks and `add .` |
 | `.git/info/exclude` | Read | Compatibility mode |
 | `.cvx/info/exclude` custom patterns | Not read | Control directory is skipped explicitly |
@@ -86,6 +88,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Open existing Git repository | Yes, compatibility mode |
 | Git reads CVX repository | Yes, with `--git-dir=.cvx` |
 | `git fsck` on CVX repository | Yes |
+| CVX `fsck`, `gc`, reset, cherry-pick, revert and stash | Yes |
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
 | Switch branches in a packed repository | Yes |

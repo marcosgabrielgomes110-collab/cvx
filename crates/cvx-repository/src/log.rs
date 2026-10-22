@@ -67,9 +67,55 @@ impl Repository {
         Ok(decorations)
     }
 
-    /// Resolves `HEAD`, a full or abbreviated object id, a branch or a tag.
+    /// Resolves `HEAD`, a full or abbreviated object id, a branch or a tag,
+    /// including `~N` and `^N` ancestry suffixes.
     pub fn resolve_revision(&self, revision: &str) -> Result<ObjectId> {
-        if revision == "HEAD" {
+        let (base, suffix) = split_revision_suffix(revision)?;
+        let mut oid = self.resolve_revision_base(base)?;
+        let mut position = 0;
+        let bytes = suffix.as_bytes();
+        while position < bytes.len() {
+            let operator = bytes[position];
+            position += 1;
+            let digits_start = position;
+            while position < bytes.len() && bytes[position].is_ascii_digit() {
+                position += 1;
+            }
+            let count = if position == digits_start {
+                1usize
+            } else {
+                suffix[digits_start..position]
+                    .parse::<usize>()
+                    .map_err(|_| Error::Message(format!("invalid revision: {revision}")))?
+            };
+            match operator {
+                b'^' => {
+                    if count == 0 {
+                        continue;
+                    }
+                    let commit = self.read_commit(oid)?;
+                    oid = *commit.parents.get(count - 1).ok_or_else(|| {
+                        Error::Message(format!("revision {revision} has no parent {count}"))
+                    })?;
+                }
+                b'~' => {
+                    for _ in 0..count {
+                        let commit = self.read_commit(oid)?;
+                        oid = *commit.parents.first().ok_or_else(|| {
+                            Error::Message(format!(
+                                "revision {revision} does not have enough parents"
+                            ))
+                        })?;
+                    }
+                }
+                _ => unreachable!("suffix parser only emits ^ and ~"),
+            }
+        }
+        Ok(oid)
+    }
+
+    fn resolve_revision_base(&self, revision: &str) -> Result<ObjectId> {
+        if revision == "HEAD" || revision == "@" {
             let head = self.head()?;
             return head.oid().ok_or_else(|| {
                 let branch = self
@@ -187,6 +233,25 @@ impl Repository {
             ))),
         }
     }
+}
+
+fn split_revision_suffix(revision: &str) -> Result<(&str, &str)> {
+    let position = revision
+        .bytes()
+        .position(|byte| byte == b'^' || byte == b'~');
+    let Some(position) = position else {
+        return Ok((revision, ""));
+    };
+    if position == 0 {
+        return Err(Error::Message(format!("invalid revision: {revision}")));
+    }
+    let (base, suffix) = revision.split_at(position);
+    for byte in suffix.bytes() {
+        if byte != b'^' && byte != b'~' && !byte.is_ascii_digit() {
+            return Err(Error::Message(format!("invalid revision: {revision}")));
+        }
+    }
+    Ok((base, suffix))
 }
 
 #[cfg(test)]

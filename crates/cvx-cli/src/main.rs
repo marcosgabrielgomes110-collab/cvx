@@ -44,11 +44,17 @@ fn run(cli: Cli) -> Result<()> {
         Command::Status(args) => commands::status::run(args),
         Command::Log(args) => commands::log::run(args),
         Command::Diff(args) => commands::diff::run(args),
+        Command::Fsck(args) => commands::fsck::run(args),
+        Command::Gc(args) => commands::gc::run(args),
+        Command::Reset(args) => commands::reset::run(args),
         Command::Restore(args) => commands::restore::run(args),
         Command::Checkout(args) => commands::checkout::run(args),
         Command::Branch(args) => commands::branch::run(args),
         Command::Switch(args) => commands::switch::run(args),
         Command::Merge(args) => commands::merge::run(args),
+        Command::CherryPick(args) => commands::cherry_pick::run(args),
+        Command::Revert(args) => commands::revert::run(args),
+        Command::Stash(args) => commands::stash::run(args),
         Command::Tag(args) => commands::tag::run(args),
         Command::Version => {
             commands::version::run();

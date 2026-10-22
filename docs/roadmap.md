@@ -12,6 +12,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete — v0.4.0 |
+| 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -92,6 +93,30 @@ Remaining:
 - SHA-256 over HTTPS/SSH;
 - fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.
+
+## Phase 6 — maintenance and history editing
+
+Implemented in v0.5.0:
+
+- `cvx fsck` checks refs, commits, trees, tags, index entries and dangling
+  objects; `--strict` also fails on dangling objects;
+- `cvx gc [--prune]` packs reachable loose objects and removes unreachable
+  loose objects on request;
+- `cvx reset --soft|--mixed|--hard` updates HEAD, index and worktree with
+  `ORIG_HEAD` and reflog entries;
+- revision ancestry suffixes such as `HEAD~2` and `main^`;
+- `cvx cherry-pick` and `cvx revert` for clean single-parent commits;
+- `cvx stash push|list|apply|pop|drop` for tracked index and worktree changes.
+
+Known limitations:
+
+- cherry-pick/revert conflict resolution is abort-only: conflicts apply no
+  changes and there is no `--continue`/`--abort` state;
+- cherry-pick does not preserve the original author identity;
+- stash does not include untracked files and applies only to the commit where
+  it was created;
+- reset does not accept pathspecs;
+- gc leaves redundant older packs in place and does not prune packed objects.
 
 ## Definition of done
 

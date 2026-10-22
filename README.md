@@ -10,10 +10,11 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: 0.4.0 release.** The local core, merge, HTTPS/SSH transport, GitHub
-> workflows and Phase 5 hardening are implemented, including property-based
-> fuzzing, crash failpoints, benchmarks, `.gitattributes`/CRLF and local
-> SHA-256 repositories. GPG release signing is supported when configured.
+> **Status: 0.5.0 release.** The local core, history editing, maintenance,
+> merge, HTTPS/SSH transport, GitHub workflows and Phase 5 hardening are
+> implemented, including property-based fuzzing, crash failpoints, benchmarks,
+> `.gitattributes`/CRLF and local SHA-256 repositories. GPG release signing is
+> supported when configured.
 >
 > CVX can commit and push this repository directly; Git remains the current
 > control directory and the compatibility test oracle.
@@ -110,6 +111,7 @@ Implemented:
 - Criterion benchmarks for pack, index, diff and repository operations;
 - `.gitattributes` text/eol/binary handling with `core.autocrlf`;
 - SHA-256 repositories for local workflows, packs, index and clones;
+- `fsck`, `gc`, reset, cherry-pick, revert and stash workflows;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
@@ -229,6 +231,11 @@ mode, including repositories packed by `git gc`.
 | `cvx branch [NAME] [START]` | `--list`, `-d`, `-D` |
 | `cvx switch <BRANCH>` | `-c`, `--detach`, `--force` |
 | `cvx merge <REVISION>` | `-m`, `--continue`, `--abort` |
+| `cvx reset [REV]` | `--soft`, `--mixed` (default), `--hard` |
+| `cvx cherry-pick <REV>` / `cvx revert <REV>` | Clean single-parent commits |
+| `cvx stash push\|list\|apply\|pop\|drop` | Tracked index and worktree changes |
+| `cvx fsck` | `--strict` also fails on dangling objects |
+| `cvx gc` | `--prune` removes unreachable loose objects |
 | `cvx tag [NAME] [TARGET]` | `-l/--list`, `-a/--annotate`, `-m`, `-f/--force` |
 | `cvx version` | Engine and repository format information |
 
@@ -288,6 +295,7 @@ use the file backend).
 | 3 | Pack writing, clone/fetch/push, SSH/HTTPS, credentials | Complete |
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete |
+| 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 
 ## Contributing
 
