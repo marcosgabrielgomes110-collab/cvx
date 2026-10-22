@@ -50,6 +50,8 @@ pub enum MergeOutcome {
 impl Repository {
     /// Merges a revision into the current branch.
     pub fn merge(&self, options: &MergeOptions) -> Result<MergeOutcome> {
+        self.require_work_tree()?;
+
         if self.merge_head()?.is_some() {
             return Err(Error::Message(
                 "a merge is already in progress; use `cvx merge --continue` or `cvx merge --abort`"
@@ -274,6 +276,8 @@ impl Repository {
 
     /// Aborts an in-progress merge and restores the pre-merge state.
     pub fn merge_abort(&self) -> Result<()> {
+        self.require_work_tree()?;
+
         let merge_head = self
             .merge_head()?
             .ok_or_else(|| Error::Message("there is no merge in progress".to_owned()))?;
@@ -327,6 +331,8 @@ impl Repository {
 
     /// Concludes a merge after conflicts were resolved and staged.
     pub fn merge_continue(&self, message: Option<&str>) -> Result<MergeOutcome> {
+        self.require_work_tree()?;
+
         let merge_head = self
             .merge_head()?
             .ok_or_else(|| Error::Message("there is no merge in progress".to_owned()))?;

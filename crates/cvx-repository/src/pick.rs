@@ -45,6 +45,8 @@ impl Repository {
     }
 
     fn apply_pick(&self, options: &PickOptions, reverse: bool) -> Result<PickOutcome> {
+        self.require_work_tree()?;
+
         let status = self.status(StatusOptions {
             untracked: true,
             collapse_untracked: false,

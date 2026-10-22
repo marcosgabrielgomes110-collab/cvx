@@ -157,6 +157,8 @@ enum WorktreeContent {
 impl Repository {
     /// Computes repository status.
     pub fn status(&self, options: StatusOptions) -> Result<Status> {
+        self.require_work_tree()?;
+
         let head = self.head()?;
         let branch = head
             .target()

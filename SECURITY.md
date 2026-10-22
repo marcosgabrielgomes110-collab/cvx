@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-CVX is currently in the `0.1.x` local-core alpha. Security fixes are applied to
-the `main` branch and to the latest published release.
+CVX is currently in the `0.6.x` beta series. Security fixes are applied to the
+`main` branch and to the latest published release.
 
 ## Reporting a vulnerability
 

@@ -62,6 +62,8 @@ impl Repository {
     /// When `MERGE_HEAD` exists, the resulting commit records both `HEAD` and
     /// the merge target as parents, matching Git's merge-commit workflow.
     pub fn commit(&self, options: CommitOptions) -> Result<CommitOutcome> {
+        self.require_work_tree()?;
+
         let merge_head = self.merge_head()?;
         let head_oid = self.head()?.oid();
         let mut parents: Vec<ObjectId> = head_oid.into_iter().collect();

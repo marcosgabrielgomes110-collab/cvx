@@ -10,11 +10,11 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: 0.5.0 release.** The local core, history editing, maintenance,
-> merge, HTTPS/SSH transport, GitHub workflows and Phase 5 hardening are
-> implemented, including property-based fuzzing, crash failpoints, benchmarks,
-> `.gitattributes`/CRLF and local SHA-256 repositories. GPG release signing is
-> supported when configured.
+> **Status: 0.6.0 release.** The local core, history editing, maintenance,
+> merge, HTTPS/SSH transport, GitHub workflows, bare repositories and Phase 5
+> hardening are implemented, including delta packs, property-based fuzzing,
+> crash failpoints, benchmarks, `.gitattributes`/CRLF and local SHA-256
+> repositories. GPG release signing is supported when configured.
 >
 > CVX can commit and push this repository directly; Git remains the current
 > control directory and the compatibility test oracle.
@@ -112,13 +112,16 @@ Implemented:
 - `.gitattributes` text/eol/binary handling with `core.autocrlf`;
 - SHA-256 repositories for local workflows, packs, index and clones;
 - `fsck`, `gc`, reset, cherry-pick, revert and stash workflows;
+- delta-compressed pack writing and compacting `gc --prune` repacks;
+- bare repositories for init, clone, fetch, push, log, fsck and gc;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
-Not implemented yet: shallow fetch updates/unshallow, `--filter` for local
-paths, automatic pagination beyond the first 100 entries, SHA-256 over
-HTTPS/SSH, submodules, LFS, hooks, commit signing, working-tree encodings,
-diff/merge attribute drivers, and fully reproducible cross-toolchain builds.
+Not implemented yet: pack/index streaming with bounded memory, thin packs,
+shallow fetch updates/unshallow, `--filter` for local paths, automatic
+pagination beyond the first 100 entries, SHA-256 over HTTPS/SSH, submodules,
+LFS, hooks, commit signing, working-tree encodings, diff/merge attribute
+drivers, and fully reproducible cross-toolchain builds.
 
 ## Design decisions
 
@@ -204,8 +207,8 @@ mode, including repositories packed by `git gc`.
 
 | Command | Notes |
 | --- | --- |
-| `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--object-format sha1\|sha256`, `--quiet` |
-| `cvx clone <URL> [DIR]` | Local, `file://`, `https://`, `ssh://`; `--branch`, `--storage`, `--depth`, `--filter` |
+| `cvx init [DIR]` | `--initial-branch`, `--storage cvx\|git`, `--object-format sha1\|sha256`, `--bare`, `--quiet` |
+| `cvx clone <URL> [DIR]` | Local, `file://`, `https://`, `ssh://`; `--branch`, `--storage`, `--depth`, `--filter`, `--bare` |
 | `cvx remote [list]` | `add <NAME> <URL>` |
 | `cvx fetch [REMOTE]` | Updates `refs/remotes/*` and tags |
 | `cvx push [REMOTE] [BRANCH]` | `-f/--force` for non-fast-forward updates |
@@ -235,7 +238,7 @@ mode, including repositories packed by `git gc`.
 | `cvx cherry-pick <REV>` / `cvx revert <REV>` | Clean single-parent commits |
 | `cvx stash push\|list\|apply\|pop\|drop` | Tracked index and worktree changes |
 | `cvx fsck` | `--strict` also fails on dangling objects |
-| `cvx gc` | `--prune` removes unreachable loose objects |
+| `cvx gc` | `--prune` repacks reachable objects and removes old packs/loose objects |
 | `cvx tag [NAME] [TARGET]` | `-l/--list`, `-a/--annotate`, `-m`, `-f/--force` |
 | `cvx version` | Engine and repository format information |
 
@@ -296,6 +299,7 @@ use the file backend).
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete |
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
+| 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 
 ## Contributing
 

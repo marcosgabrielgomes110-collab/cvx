@@ -62,6 +62,7 @@ pub struct Repository {
     kind: RepositoryKind,
     objects: Rc<ObjectStore>,
     algorithm: HashAlgorithm,
+    bare: bool,
 }
 
 impl Repository {
@@ -88,6 +89,10 @@ impl Repository {
         };
 
         loop {
+            if is_bare_repository(current) {
+                return Self::open(current);
+            }
+
             let cvx = current.join(CVX_DIR);
             let git = current.join(GIT_DIR);
 
@@ -129,12 +134,18 @@ impl Repository {
             return Err(Error::NotARepository { path: control_dir });
         }
 
-        let work_tree = control_dir
-            .parent()
-            .ok_or_else(|| {
-                Error::Message(format!("{} has no parent directory", control_dir.display()))
-            })?
-            .to_path_buf();
+        let config = Config::load_file(control_dir.join("config"))?;
+        let bare = config.get_bool("core.bare")?.unwrap_or(false);
+        let work_tree = if bare {
+            control_dir.clone()
+        } else {
+            control_dir
+                .parent()
+                .ok_or_else(|| {
+                    Error::Message(format!("{} has no parent directory", control_dir.display()))
+                })?
+                .to_path_buf()
+        };
 
         let kind = if control_dir.file_name() == Some(OsStr::new(CVX_DIR))
             || control_dir.join("cvx.toml").is_file()
@@ -144,7 +155,6 @@ impl Repository {
             RepositoryKind::Git
         };
 
-        let config = Config::load_file(control_dir.join("config"))?;
         let algorithm = config
             .get("extensions.objectformat")
             .map(HashAlgorithm::parse)
@@ -161,6 +171,7 @@ impl Repository {
             kind,
             objects,
             algorithm,
+            bare,
         };
         repository.validate_format()?;
         Ok(repository)
@@ -179,6 +190,21 @@ impl Repository {
     /// Returns which control-directory convention is in use.
     pub fn kind(&self) -> RepositoryKind {
         self.kind
+    }
+
+    /// Returns whether this is a bare repository without a worktree.
+    pub fn is_bare(&self) -> bool {
+        self.bare
+    }
+
+    /// Rejects operations that require a worktree.
+    pub fn require_work_tree(&self) -> Result<()> {
+        if self.bare {
+            return Err(Error::Message(
+                "this operation must be run in a work tree".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     /// Returns a reference store for this repository.
@@ -436,10 +462,6 @@ impl Repository {
     fn validate_format(&self) -> Result<()> {
         let config = self.config()?;
 
-        if config.get_bool("core.bare")?.unwrap_or(false) {
-            return Err(Error::unsupported("bare repositories"));
-        }
-
         let version = config
             .get("core.repositoryformatversion")
             .unwrap_or("0")
@@ -473,6 +495,17 @@ impl Repository {
     }
 }
 
+fn is_bare_repository(path: &Path) -> bool {
+    if !path.join("HEAD").is_file() || !path.join("objects").is_dir() || !path.join("refs").is_dir()
+    {
+        return false;
+    }
+    Config::load_file(path.join("config"))
+        .ok()
+        .and_then(|config| config.get_bool("core.bare").ok().flatten())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,6 +523,7 @@ mod tests {
             initial_branch: None,
             storage: InitStorage::Cvx,
             object_format: cvx_object::HashAlgorithm::Sha1,
+            bare: false,
             quiet: true,
         })
         .expect("init");
@@ -517,17 +551,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_bare_repositories() {
+    fn opens_bare_repositories() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let control = temp.path().join(".cvx");
+        let control = temp.path().join("bare.git");
         std::fs::create_dir_all(control.join("objects")).expect("mkdir");
+        std::fs::create_dir_all(control.join("refs")).expect("mkdir");
+        std::fs::write(control.join("HEAD"), "ref: refs/heads/main\n").expect("HEAD");
         std::fs::write(
             control.join("config"),
             "[core]\n repositoryformatversion = 0\n bare = true\n",
         )
         .expect("write config");
 
-        let result = Repository::open(&control);
-        assert!(matches!(result, Err(Error::Unsupported { .. })));
+        let repository = Repository::open(&control).expect("open bare");
+        assert!(repository.is_bare());
+        assert!(repository.require_work_tree().is_err());
     }
 }

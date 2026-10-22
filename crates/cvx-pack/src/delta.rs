@@ -107,6 +107,137 @@ fn read_varint(data: &[u8], mut position: usize) -> Option<(u64, usize)> {
     Some((value, position))
 }
 
+/// Builds a Git pack delta that transforms `base` into `target`.
+///
+/// The encoder uses a small rolling block index and is intentionally
+/// conservative: it falls back to inserts when no sufficiently long match is
+/// found. The result is always accepted by [`apply_delta`].
+pub(crate) fn create_delta(base: &[u8], target: &[u8]) -> Vec<u8> {
+    const BLOCK: usize = 16;
+    const MAX_CANDIDATES: usize = 8;
+
+    let mut output = Vec::new();
+    write_varint(base.len() as u64, &mut output);
+    write_varint(target.len() as u64, &mut output);
+
+    if target.is_empty() {
+        return output;
+    }
+    if base.is_empty() {
+        write_insert(target, &mut output);
+        return output;
+    }
+
+    let mut blocks: std::collections::HashMap<u64, Vec<usize>> = std::collections::HashMap::new();
+    if base.len() >= BLOCK {
+        for position in 0..=base.len() - BLOCK {
+            let hash = hash_block(&base[position..position + BLOCK]);
+            let positions = blocks.entry(hash).or_default();
+            if positions.len() < MAX_CANDIDATES {
+                positions.push(position);
+            }
+        }
+    }
+
+    let mut position = 0;
+    let mut insert_start = 0;
+    while position < target.len() {
+        let mut matched = None;
+        if position + BLOCK <= target.len() {
+            let hash = hash_block(&target[position..position + BLOCK]);
+            if let Some(candidates) = blocks.get(&hash) {
+                for candidate in candidates {
+                    if base[*candidate..*candidate + BLOCK] == target[position..position + BLOCK] {
+                        let mut length = BLOCK;
+                        while *candidate + length < base.len()
+                            && position + length < target.len()
+                            && base[*candidate + length] == target[position + length]
+                        {
+                            length += 1;
+                        }
+                        matched = Some((*candidate, length));
+                        break;
+                    }
+                }
+            }
+        }
+
+        match matched {
+            Some((offset, length)) => {
+                if insert_start < position {
+                    write_insert(&target[insert_start..position], &mut output);
+                }
+                write_copy(offset, length, &mut output);
+                position += length;
+                insert_start = position;
+            }
+            None => position += 1,
+        }
+    }
+    if insert_start < target.len() {
+        write_insert(&target[insert_start..], &mut output);
+    }
+    output
+}
+
+fn hash_block(block: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in block {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn write_varint(mut value: u64, output: &mut Vec<u8>) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        output.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn write_insert(bytes: &[u8], output: &mut Vec<u8>) {
+    for chunk in bytes.chunks(127) {
+        output.push(chunk.len() as u8);
+        output.extend_from_slice(chunk);
+    }
+}
+
+fn write_copy(offset: usize, length: usize, output: &mut Vec<u8>) {
+    let mut offset = offset as u64;
+    let mut length = length as u64;
+    while length > 0 {
+        let chunk = length.min(0x00ff_ffff) as usize;
+        let mut opcode = 0x80u8;
+        let mut bytes = Vec::new();
+        for index in 0..4 {
+            let byte = ((offset >> (index * 8)) & 0xff) as u8;
+            if byte != 0 {
+                opcode |= 1 << index;
+                bytes.push(byte);
+            }
+        }
+        for index in 0..3 {
+            let byte = ((chunk as u64 >> (index * 8)) & 0xff) as u8;
+            if byte != 0 {
+                opcode |= 1 << (index + 4);
+                bytes.push(byte);
+            }
+        }
+        output.push(opcode);
+        output.extend_from_slice(&bytes);
+        offset += chunk as u64;
+        length -= chunk as u64;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +269,35 @@ mod tests {
         assert!(apply_delta(b"hello", &[5, 10, 0x90, 5]).is_err());
         assert!(apply_delta(b"hello", &[5, 5, 0x00]).is_err());
         assert!(apply_delta(b"hello", &[5, 5, 0x90]).is_err());
+    }
+
+    #[test]
+    fn creates_roundtrippable_deltas() {
+        let base = b"line one\nline two\nline three\nline four\n";
+        let target = b"line one\nline two changed\nline three\nline four\nline five\n";
+        let delta = create_delta(base, target);
+        assert_eq!(apply_delta(base, &delta).unwrap(), target);
+        assert!(delta.len() < target.len() + 16);
+    }
+
+    #[test]
+    fn creates_empty_and_insert_deltas() {
+        assert_eq!(
+            apply_delta(b"base", &create_delta(b"base", b"")).unwrap(),
+            b""
+        );
+        assert_eq!(
+            apply_delta(b"", &create_delta(b"", b"new content")).unwrap(),
+            b"new content"
+        );
+    }
+
+    #[test]
+    fn creates_large_deltas_with_multiple_copies() {
+        let base = vec![b'x'; 200_000];
+        let target = base.clone();
+        let delta = create_delta(&base, &target);
+        assert_eq!(apply_delta(&base, &delta).unwrap(), target);
+        assert!(delta.len() < 100);
     }
 }

@@ -41,6 +41,7 @@ type Snapshot = BTreeMap<Vec<u8>, (u32, ObjectId)>;
 impl Repository {
     /// Restores index entries and/or worktree files.
     pub fn restore(&self, options: &RestoreOptions) -> Result<RestoreOutcome> {
+        self.require_work_tree()?;
         if options.paths.is_empty() {
             return Err(Error::Message(
                 "nothing specified, nothing restored".to_owned(),

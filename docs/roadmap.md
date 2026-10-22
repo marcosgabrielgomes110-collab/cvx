@@ -13,6 +13,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 4 | GitHub API, OAuth, collaborators, reviews, checks, milestones, GraphQL, release assets | Complete — v0.3.0 |
 | 5 | Fuzzing, crash recovery, benchmarks, SHA-256, release hardening | Complete — v0.4.0 |
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
+| 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -100,8 +101,8 @@ Implemented in v0.5.0:
 
 - `cvx fsck` checks refs, commits, trees, tags, index entries and dangling
   objects; `--strict` also fails on dangling objects;
-- `cvx gc [--prune]` packs reachable loose objects and removes unreachable
-  loose objects on request;
+- `cvx gc [--prune]` packs reachable objects; `--prune` performs a full repack,
+  removes old packs and deletes unreachable loose objects;
 - `cvx reset --soft|--mixed|--hard` updates HEAD, index and worktree with
   `ORIG_HEAD` and reflog entries;
 - revision ancestry suffixes such as `HEAD~2` and `main^`;
@@ -116,7 +117,27 @@ Known limitations:
 - stash does not include untracked files and applies only to the commit where
   it was created;
 - reset does not accept pathspecs;
-- gc leaves redundant older packs in place and does not prune packed objects.
+- the default `gc` leaves old packs in place; `gc --prune` performs the full
+  repack and removal.
+
+## Phase 7 — reliability, pack performance and bare repositories
+
+Implemented in v0.6.0:
+
+- offset-delta pack writing with bounded chains and Git `verify-pack` coverage;
+- `gc --prune` repacks reachable objects, removes superseded packs unless a
+  `.keep` file exists, and respects index entries, reflogs, stash refs and
+  control references;
+- bare repositories through `cvx init --bare` and `cvx clone --bare`, including
+  fetch, push, log, tag, fsck and gc;
+- explicit rejection of worktree commands in bare repositories;
+- crash-recovery tests for stash publication and hard reset.
+
+Remaining:
+
+- pack and index streaming with bounded memory;
+- thin-pack generation and network SHA-256;
+- hooks, commit signing, submodules and LFS.
 
 ## Definition of done
 

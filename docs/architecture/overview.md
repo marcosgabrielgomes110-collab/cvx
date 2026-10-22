@@ -132,6 +132,6 @@ the system, crate graph, object model and workflows.
 
 Automatic pagination beyond the first page, GitHub App installation tokens,
 OAuth browser callbacks, shallow fetch updates/unshallow, submodules, LFS,
-reftable, SHA-256 over network transports, bare repositories, linked worktrees,
+reftable, SHA-256 over network transports, linked worktrees,
 working-tree encodings, diff/merge attribute drivers, hooks and commit signing. These are explicit errors or documented
 gaps, not silent no-ops.

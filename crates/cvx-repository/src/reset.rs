@@ -44,6 +44,8 @@ pub struct ResetOutcome {
 impl Repository {
     /// Moves HEAD to a commit and optionally resets the index and worktree.
     pub fn reset(&self, options: &ResetOptions) -> Result<ResetOutcome> {
+        self.require_work_tree()?;
+
         let previous = self.head()?.oid();
         let target = self.resolve_revision(&options.target)?;
         let commit = self.read_commit(target)?;

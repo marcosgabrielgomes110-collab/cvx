@@ -10,9 +10,9 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `.cvx/` control directory | Yes | Yes | Git-compatible internals |
 | `.git/` control directory | Yes | Yes | Compatibility mode |
 | Loose objects (SHA-1/SHA-256) | Yes | Yes | Hash verified on read |
-| Pack v2/v3 | Yes | v2 | Writer emits complete objects, not deltas |
+| Pack v2/v3 | Yes | v2 | Writer emits offset deltas and complete objects |
 | Pack index v2 | Yes | Yes | Version-1 indexes are rejected |
-| Delta chains (`ofs-delta`, `ref-delta`) | Yes | No | Depth and output size are bounded |
+| Delta chains (`ofs-delta`, `ref-delta`) | Yes | Yes | Offset deltas with bounded write depth; `ref-delta` read only |
 | Multi-pack index (MIDX) | No | No | Individual `.idx` files are used |
 | `objects/info/alternates` | No | No | Rejected as unsupported |
 | `packed-refs` | Yes | Yes | Loose refs take precedence; refs can be deleted from packed-refs |
@@ -21,7 +21,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Reflogs | Yes | Yes | Commits and branch switches |
 | SHA-256 repositories | Yes | Yes | Local workflows, packs, index and clones; HTTPS/SSH not yet |
 | Reftable storage | No | No | Detected and rejected |
-| Bare repositories | No | No | Rejected during discovery |
+| Bare repositories | Yes | Yes | Init/clone, fetch/push, log, tag, fsck and gc; worktree commands fail explicitly |
 | Linked worktrees | No | No | Rejected during discovery |
 | Submodules | No | No | Checkout and diff reject gitlinks |
 | Git LFS | No | No | Pointer files are treated as ordinary blobs |
@@ -89,6 +89,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Git reads CVX repository | Yes, with `--git-dir=.cvx` |
 | `git fsck` on CVX repository | Yes |
 | CVX `fsck`, `gc`, reset, cherry-pick, revert and stash | Yes |
+| Bare repositories | Yes | Git reads/writes refs and packs |
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
 | Switch branches in a packed repository | Yes |

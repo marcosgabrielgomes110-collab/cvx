@@ -30,12 +30,15 @@ comma-separated failpoint name. Production runs leave it unset.
 | `index.before-publish` | Index lock written, not renamed |
 | `ref.before-publish` | Ref lock written, not renamed |
 | `pack.before-index` | Pack written, index missing |
+| `stash.before-reset` | Stash ref written, worktree reset not started |
 
 Recovery tests live in `crates/cvx-cli/tests/recovery.rs` and verify:
 
 - `HEAD` remains unchanged after an interrupted commit;
 - lock files are removed after an interrupted index/ref publication;
 - staged changes survive and the operation can be retried;
+- an interrupted stash keeps its saved entry and can be applied later;
+- an interrupted hard reset leaves `HEAD` unchanged and can be retried;
 - an orphan pack without an index is ignored by repository discovery.
 
 Example:
@@ -72,6 +75,23 @@ the 32-byte identifier width. Git accepts these repositories directly
 
 SHA-256 over HTTPS/SSH and mixed-format transfers are rejected explicitly.
 
+## Delta packs and garbage collection
+
+The pack writer emits `ofs-delta` entries when a candidate base is likely to
+produce a smaller pack. Delta write depth is bounded and every generated pack
+is verified with `git verify-pack` in tests.
+
+`cvx gc --prune` performs a full repack of reachable objects, verifies the new
+pack, then removes superseded packs unless a `.keep` file is present. Reachable
+roots include refs, `HEAD`, the index, reflogs, stash refs and control files such
+as `ORIG_HEAD`.
+
+## Bare repositories
+
+`cvx init --bare` and `cvx clone --bare` create repositories without a worktree.
+Bare discovery, fetch, push, log, tag, fsck and gc work normally. Commands that
+need a worktree fail explicitly instead of writing inside the repository.
+
 ## Release verification and signing
 
 Release workflows verify every checksum before publishing. When the
@@ -81,6 +101,7 @@ GPG and the `.asc` files are published alongside the checksums.
 
 ## Remaining hardening
 
-- SHA-256 over HTTPS/SSH;
+- pack and index streaming with bounded memory;
+- SHA-256 over HTTPS/SSH and thin-pack generation;
 - fully reproducible artifacts across toolchains;
 - working-tree encodings and diff/merge attribute drivers.

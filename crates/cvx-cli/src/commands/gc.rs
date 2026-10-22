@@ -19,7 +19,10 @@ pub fn run(args: GcArgs) -> Result<()> {
             None => println!("No loose objects to pack"),
         }
         if args.prune {
-            println!("Pruned {} unreachable loose objects", report.pruned_objects);
+            println!(
+                "Pruned {} loose objects and removed {} old packs",
+                report.pruned_objects, report.removed_packs
+            );
         }
     }
     Ok(())

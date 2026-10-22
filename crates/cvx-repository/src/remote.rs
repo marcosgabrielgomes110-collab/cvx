@@ -39,6 +39,8 @@ pub struct CloneOptions {
     pub depth: Option<u32>,
     /// Partial-clone filter, such as `blob:none`.
     pub filter: Option<String>,
+    /// Create a bare destination without a worktree.
+    pub bare: bool,
 }
 
 /// Result of a clone.
@@ -179,11 +181,15 @@ impl Repository {
             ));
         }
         let source = open_local_remote(&options.url)?;
-        let source_url = source
-            .control_dir()
-            .parent()
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_else(|| options.url.clone());
+        let source_url = if source.is_bare() {
+            source.control_dir().to_string_lossy().into_owned()
+        } else {
+            source
+                .control_dir()
+                .parent()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| options.url.clone())
+        };
 
         if options.directory.exists()
             && std::fs::read_dir(&options.directory)
@@ -232,6 +238,7 @@ impl Repository {
             initial_branch: Some(branch.clone()),
             storage: options.storage,
             object_format: source.hash_algorithm(),
+            bare: options.bare,
             quiet: true,
         })?;
         let repository = match init {
@@ -338,6 +345,7 @@ impl Repository {
             initial_branch: Some(branch.clone()),
             storage: options.storage,
             object_format: algorithm,
+            bare: options.bare,
             quiet: true,
         })?;
         let repository = match init {
@@ -744,12 +752,14 @@ fn finish_clone(
         "\n[branch \"{branch}\"]\n\tremote = {remote_name}\n\tmerge = refs/heads/{branch}\n"
     ))?;
 
-    let snapshot = repository.tree_snapshot_for_commit(head)?;
-    let filemode = repository.filemode()?;
-    repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
-    let index = repository.index_from_tree(&snapshot, filemode)?;
-    let lock = IndexLock::acquire(repository.control_dir())?;
-    lock.commit(&index)?;
+    if !repository.is_bare() {
+        let snapshot = repository.tree_snapshot_for_commit(head)?;
+        let filemode = repository.filemode()?;
+        repository.checkout_target(&snapshot, &BTreeMap::new(), filemode, true)?;
+        let index = repository.index_from_tree(&snapshot, filemode)?;
+        let lock = IndexLock::acquire(repository.control_dir())?;
+        lock.commit(&index)?;
+    }
 
     Ok(CloneOutcome {
         repository,

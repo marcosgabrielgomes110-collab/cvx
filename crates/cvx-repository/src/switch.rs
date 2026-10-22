@@ -42,6 +42,8 @@ pub(crate) type TreeSnapshot = BTreeMap<Vec<u8>, (u32, ObjectId)>;
 impl Repository {
     /// Switches branches or detaches HEAD.
     pub fn switch(&self, options: &SwitchOptions) -> Result<SwitchOutcome> {
+        self.require_work_tree()?;
+
         if self.merge_head()?.is_some() {
             return Err(Error::Message(
                 "cannot switch branches while a merge is in progress".to_owned(),

@@ -36,6 +36,8 @@ pub struct StashOutcome {
 impl Repository {
     /// Saves tracked worktree and index changes, then resets to `HEAD`.
     pub fn stash_push(&self, options: &StashPushOptions) -> Result<StashOutcome> {
+        self.require_work_tree()?;
+
         let status = self.status(StatusOptions {
             untracked: true,
             collapse_untracked: false,
@@ -163,6 +165,7 @@ impl Repository {
             self.append_reflog("refs/stash", old, oid, &committer, &reflog_message)?;
         }
 
+        cvx_core::failpoint::hit("stash.before-reset")?;
         self.reset(&ResetOptions {
             target: "HEAD".to_owned(),
             mode: ResetMode::Hard,
@@ -187,6 +190,8 @@ impl Repository {
 
     /// Applies the newest stash without removing it.
     pub fn stash_apply(&self) -> Result<StashOutcome> {
+        self.require_work_tree()?;
+
         let oid = self
             .refs()
             .read_ref("refs/stash")?

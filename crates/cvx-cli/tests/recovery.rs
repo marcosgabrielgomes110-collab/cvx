@@ -121,3 +121,66 @@ fn orphan_pack_without_index_is_ignored() {
         .expect("status");
     assert_eq!(normalize(&status), "");
 }
+
+#[test]
+fn interrupted_stash_keeps_the_saved_entry_and_can_be_applied_later() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "base\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "base"]).assert().success();
+    env.write("file.txt", "changed\n");
+
+    env.cvx()
+        .env("CVX_FAILPOINT", "stash.before-reset")
+        .args(["stash", "push", "-m", "interrupted"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("injected failure"));
+    assert_eq!(env.read("file.txt"), "changed\n");
+    let list = env.cvx().args(["stash", "list"]).output().unwrap();
+    assert!(stdout(&list).contains("interrupted"));
+
+    env.cvx()
+        .args(["reset", "--hard", "HEAD"])
+        .assert()
+        .success();
+    env.cvx().args(["stash", "apply"]).assert().success();
+    assert_eq!(env.read("file.txt"), "changed\n");
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}
+
+#[test]
+fn interrupted_hard_reset_can_be_retried() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "one\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "one"]).assert().success();
+    env.write("file.txt", "two\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "two"]).assert().success();
+    let before = stdout(&env.assert_git_cvx_ok(&["rev-parse", "HEAD"]))
+        .trim()
+        .to_owned();
+
+    env.cvx()
+        .env("CVX_FAILPOINT", "index.before-publish")
+        .args(["reset", "--hard", "HEAD~1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("injected failure"));
+    let after = stdout(&env.assert_git_cvx_ok(&["rev-parse", "HEAD"]))
+        .trim()
+        .to_owned();
+    assert_eq!(before, after);
+
+    env.cvx()
+        .args(["reset", "--hard", "HEAD~1"])
+        .assert()
+        .success();
+    assert_eq!(env.read("file.txt"), "one\n");
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}

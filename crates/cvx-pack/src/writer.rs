@@ -47,9 +47,9 @@ pub struct PackWriteOutcome {
 
 /// Writes a version-2 packfile and its version-2 index.
 ///
-/// Objects are written as complete zlib-compressed entries without deltas.
-/// Duplicate object identifiers are removed, and objects are written in
-/// identifier order so the output is deterministic.
+/// Objects are written with offset deltas when that is smaller than a complete
+/// zlib-compressed entry. Duplicate object identifiers are removed and the
+/// output is deterministic.
 pub fn write_pack(
     directory: impl AsRef<Path>,
     inputs: &[PackInput<'_>],
@@ -111,40 +111,102 @@ fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<Buil
         objects.entry(oid).or_insert((input.kind, input.data));
     }
 
+    let mut ordered: Vec<(ObjectId, ObjectKind, &[u8])> = objects
+        .into_iter()
+        .map(|(oid, (kind, data))| (oid, kind, data))
+        .collect();
+    ordered.sort_by_key(|(oid, kind, data)| (kind_rank(*kind), data.len(), *oid));
+
     let mut pack = Vec::new();
     pack.extend_from_slice(b"PACK");
     pack.extend_from_slice(&PACK_VERSION.to_be_bytes());
-    pack.extend_from_slice(&(objects.len() as u32).to_be_bytes());
+    pack.extend_from_slice(&(ordered.len() as u32).to_be_bytes());
 
-    let mut packed = Vec::with_capacity(objects.len());
-    let mut index_entries = Vec::with_capacity(objects.len());
+    let mut packed = Vec::with_capacity(ordered.len());
+    let mut index_entries = Vec::with_capacity(ordered.len());
+    let mut recent: Vec<Candidate<'_>> = Vec::new();
 
-    for (oid, (kind, data)) in &objects {
+    for (oid, kind, data) in ordered {
         let offset = pack.len() as u64;
-        let header = object_header(*kind, data.len() as u64)?;
+        let start = pack.len();
+        let full_header = object_header(kind, data.len() as u64)?;
+        let full_compressed = compress(data)?;
+        let mut best_size = full_header.len() + full_compressed.len();
+        let mut chosen: Option<(Vec<u8>, usize)> = None;
 
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|error| Error::io("failed to compress pack object data", error))?;
-        let compressed = encoder
-            .finish()
-            .map_err(|error| Error::io("failed to finish pack object compression", error))?;
+        for base in recent
+            .iter()
+            .rev()
+            .filter(|base| base.kind == kind)
+            .take(MAX_WRITE_DELTA_CANDIDATES)
+        {
+            if data.len() > MAX_WRITE_DELTA_INPUT || base.data.len() > MAX_WRITE_DELTA_INPUT {
+                continue;
+            }
+            if base.depth >= MAX_WRITE_DELTA_DEPTH {
+                continue;
+            }
+            if base.data.len() == data.len() && base.data == data {
+                continue;
+            }
+            if !worth_delta(base.data, data) {
+                continue;
+            }
+            let delta = crate::delta::create_delta(base.data, data);
+            if delta.len() >= data.len() {
+                continue;
+            }
+            let delta_header = object_header_code(6, delta.len() as u64)?;
+            let distance = offset - base.offset;
+            let ofs = encode_ofs_delta(distance)?;
+            let delta_compressed = compress(&delta)?;
+            let total = delta_header.len() + ofs.len() + delta_compressed.len();
+            if total < best_size {
+                best_size = total;
+                chosen = Some((
+                    [delta_header, ofs, delta_compressed].concat(),
+                    base.depth + 1,
+                ));
+                if total * 2 < data.len() {
+                    break;
+                }
+            }
+        }
+
+        let depth = match chosen {
+            Some((bytes, depth)) => {
+                pack.extend_from_slice(&bytes);
+                depth
+            }
+            None => {
+                pack.extend_from_slice(&full_header);
+                pack.extend_from_slice(&full_compressed);
+                0
+            }
+        };
 
         let mut crc = crc32fast::Hasher::new();
-        crc.update(&header);
-        crc.update(&compressed);
+        crc.update(&pack[start..]);
         let crc = crc.finalize();
 
-        pack.extend_from_slice(&header);
-        pack.extend_from_slice(&compressed);
         packed.push(PackedObject {
-            oid: *oid,
+            oid,
             offset,
             size: data.len() as u64,
         });
-        index_entries.push((*oid, crc, offset));
+        index_entries.push((oid, crc, offset));
+        recent.push(Candidate {
+            kind,
+            offset,
+            data,
+            depth,
+        });
+        if recent.len() > 64 {
+            recent.remove(0);
+        }
     }
+
+    index_entries.sort_by_key(|(oid, _, _)| *oid);
 
     let checksum_bytes = crate::checksum::checksum(algorithm, &pack);
     let checksum = ObjectId::from_slice(&checksum_bytes)
@@ -160,6 +222,75 @@ fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<Buil
     })
 }
 
+fn worth_delta(base: &[u8], target: &[u8]) -> bool {
+    const SAMPLE: usize = 64;
+    const MIN_SHARED: usize = 16;
+    let prefix = base
+        .iter()
+        .zip(target)
+        .take(SAMPLE)
+        .take_while(|(left, right)| left == right)
+        .count();
+    if prefix >= MIN_SHARED {
+        return true;
+    }
+    let base_tail = &base[prefix..];
+    let target_tail = &target[prefix..];
+    let suffix = base_tail
+        .iter()
+        .rev()
+        .zip(target_tail.iter().rev())
+        .take(SAMPLE)
+        .take_while(|(left, right)| left == right)
+        .count();
+    prefix + suffix >= MIN_SHARED
+}
+
+struct Candidate<'a> {
+    kind: ObjectKind,
+    offset: u64,
+    data: &'a [u8],
+    depth: usize,
+}
+
+const MAX_WRITE_DELTA_DEPTH: usize = 32;
+const MAX_WRITE_DELTA_CANDIDATES: usize = 8;
+const MAX_WRITE_DELTA_INPUT: usize = 8 * 1024 * 1024;
+
+fn kind_rank(kind: ObjectKind) -> u8 {
+    match kind {
+        ObjectKind::Commit => 0,
+        ObjectKind::Tree => 1,
+        ObjectKind::Tag => 2,
+        ObjectKind::Blob => 3,
+    }
+}
+
+fn compress(data: &[u8]) -> Result<Vec<u8>> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(data)
+        .map_err(|error| Error::io("failed to compress pack object data", error))?;
+    encoder
+        .finish()
+        .map_err(|error| Error::io("failed to finish pack object compression", error))
+}
+
+fn encode_ofs_delta(mut distance: u64) -> Result<Vec<u8>> {
+    if distance == 0 {
+        return Err(Error::corrupt("pack delta distance cannot be zero"));
+    }
+    let mut bytes = vec![(distance & 0x7f) as u8];
+    distance >>= 7;
+    while distance > 0 {
+        distance -= 1;
+        bytes.push(((distance & 0x7f) as u8) | 0x80);
+        distance >>= 7;
+    }
+    bytes.reverse();
+    Ok(bytes)
+}
+
 fn object_header(kind: ObjectKind, size: u64) -> Result<Vec<u8>> {
     let type_code: u8 = match kind {
         ObjectKind::Commit => 1,
@@ -167,7 +298,10 @@ fn object_header(kind: ObjectKind, size: u64) -> Result<Vec<u8>> {
         ObjectKind::Blob => 3,
         ObjectKind::Tag => 4,
     };
+    object_header_code(type_code, size)
+}
 
+fn object_header_code(type_code: u8, size: u64) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut first = (type_code << 4) | (size & 0x0f) as u8;
     let mut remaining = size >> 4;
@@ -348,6 +482,47 @@ mod tests {
                     .data
             );
         }
+    }
+
+    #[test]
+    fn writes_offset_deltas_for_similar_objects() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let base = "shared line\n".repeat(2_000).into_bytes();
+        let mut target = base.clone();
+        target.extend_from_slice(b"one more line\n");
+        let inputs = [
+            PackInput {
+                kind: ObjectKind::Blob,
+                data: &base,
+            },
+            PackInput {
+                kind: ObjectKind::Blob,
+                data: &target,
+            },
+        ];
+        let outcome = write_pack(temp.path(), &inputs).expect("write");
+        let bytes = std::fs::read(&outcome.pack_path).expect("pack");
+        assert!(
+            outcome
+                .objects
+                .iter()
+                .any(|object| (bytes[object.offset as usize] >> 4) & 7 == 6),
+            "expected at least one offset delta"
+        );
+        let pack = Pack::open(&outcome.index_path).expect("open");
+        assert_eq!(pack.read(outcome.objects[0].oid).unwrap().data, base);
+        assert_eq!(pack.read(outcome.objects[1].oid).unwrap().data, target);
+
+        let verify = std::process::Command::new("git")
+            .args(["verify-pack", "-v"])
+            .arg(&outcome.index_path)
+            .output()
+            .expect("run git verify-pack");
+        assert!(
+            verify.status.success(),
+            "git verify-pack failed: {}",
+            String::from_utf8_lossy(&verify.stderr)
+        );
     }
 
     #[test]

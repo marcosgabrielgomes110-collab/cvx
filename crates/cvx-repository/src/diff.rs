@@ -51,6 +51,8 @@ type Snapshot = BTreeMap<Vec<u8>, SnapshotEntry>;
 impl Repository {
     /// Computes and renders a diff.
     pub fn diff(&self, options: &DiffOptions) -> Result<String> {
+        self.require_work_tree()?;
+
         if options.revisions.len() > 2 {
             return Err(Error::Message(
                 "cvx diff accepts at most two revisions".to_owned(),

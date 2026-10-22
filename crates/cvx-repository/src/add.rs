@@ -59,6 +59,8 @@ struct Pathspec {
 impl Repository {
     /// Stages paths into the index.
     pub fn add(&self, options: AddOptions) -> Result<AddOutcome> {
+        self.require_work_tree()?;
+
         if options.paths.is_empty() {
             return Err(Error::Message(
                 "nothing specified, nothing added".to_owned(),

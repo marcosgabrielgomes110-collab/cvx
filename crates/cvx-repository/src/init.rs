@@ -40,6 +40,8 @@ pub struct InitOptions {
     pub storage: InitStorage,
     /// Object format for new repositories.
     pub object_format: cvx_object::HashAlgorithm,
+    /// Create a bare repository without a worktree.
+    pub bare: bool,
     /// Suppress the human-readable summary.
     pub quiet: bool,
 }
@@ -51,6 +53,7 @@ impl Default for InitOptions {
             initial_branch: None,
             storage: InitStorage::Cvx,
             object_format: cvx_object::HashAlgorithm::Sha1,
+            bare: false,
             quiet: false,
         }
     }
@@ -100,7 +103,7 @@ impl Repository {
         let requested = if options.directory.as_os_str().is_empty() {
             PathBuf::from(".")
         } else {
-            options.directory
+            options.directory.clone()
         };
 
         if requested.exists() && !requested.is_dir() {
@@ -111,6 +114,10 @@ impl Repository {
         }
         fs::ensure_dir(&requested)?;
         let target = std::fs::canonicalize(&requested).path_context(&requested)?;
+
+        if options.bare {
+            return Self::init_bare(&target, &options);
+        }
 
         let control_name = match options.storage {
             InitStorage::Cvx => CVX_DIR,
@@ -153,6 +160,7 @@ impl Repository {
                 options.storage,
                 options.object_format,
                 branch.as_deref(),
+                false,
             )?;
             return Ok(InitOutcome::Reinitialized(Repository::open(&control_dir)?));
         }
@@ -167,6 +175,7 @@ impl Repository {
             options.storage,
             options.object_format,
             Some(&branch),
+            false,
         )?;
 
         let temporary_path = temporary.keep();
@@ -179,6 +188,48 @@ impl Repository {
         }
 
         Ok(InitOutcome::Created(Repository::open(&control_dir)?))
+    }
+}
+
+impl Repository {
+    fn init_bare(target: &Path, options: &InitOptions) -> Result<InitOutcome> {
+        if target.join(CVX_DIR).is_dir() || target.join(GIT_DIR).is_dir() {
+            return Err(Error::Message(format!(
+                "cannot initialize a bare repository inside a worktree at {}",
+                target.display()
+            )));
+        }
+
+        let config_path = target.join("config");
+        let existing = config_path.is_file();
+        if existing {
+            let config = cvx_config::Config::load_file(&config_path)?;
+            if !config.get_bool("core.bare")?.unwrap_or(false) {
+                return Err(Error::Message(format!(
+                    "{} is a non-bare repository",
+                    target.display()
+                )));
+            }
+        }
+
+        let branch = if target.join("HEAD").exists() {
+            None
+        } else {
+            Some(resolve_initial_branch(options.initial_branch.as_deref())?)
+        };
+        initialize_layout(
+            target,
+            options.storage,
+            options.object_format,
+            branch.as_deref(),
+            true,
+        )?;
+        let repository = Repository::open(target)?;
+        Ok(if existing {
+            InitOutcome::Reinitialized(repository)
+        } else {
+            InitOutcome::Created(repository)
+        })
     }
 }
 
@@ -201,6 +252,7 @@ fn initialize_layout(
     storage: InitStorage,
     object_format: cvx_object::HashAlgorithm,
     branch: Option<&str>,
+    bare: bool,
 ) -> Result<()> {
     for directory in [
         "branches",
@@ -226,7 +278,7 @@ fn initialize_layout(
     }
     write_if_missing(
         &control_dir.join("config"),
-        config_contents(filemode, ignorecase, object_format).as_bytes(),
+        config_contents(filemode, ignorecase, object_format, bare).as_bytes(),
         0o644,
     )?;
     write_if_missing(
@@ -241,15 +293,15 @@ fn initialize_layout(
     )?;
 
     if storage == InitStorage::Cvx {
-        write_if_missing(
-            &control_dir.join("cvx.toml"),
-            b"# CVX repository metadata. Internal; do not edit.\n\
-              [repository]\n\
-              format-version = 1\n\
-              object-format = \"sha1\"\n\
-              storage = \"git-compatible\"\n",
-            0o644,
-        )?;
+        let metadata = format!(
+            "# CVX repository metadata. Internal; do not edit.\n\
+             [repository]\n\
+             format-version = 1\n\
+             object-format = \"{}\"\n\
+             storage = \"git-compatible\"\n",
+            object_format.name()
+        );
+        write_if_missing(&control_dir.join("cvx.toml"), metadata.as_bytes(), 0o644)?;
     }
 
     Ok(())
@@ -266,6 +318,7 @@ fn config_contents(
     filemode: bool,
     ignorecase: bool,
     object_format: cvx_object::HashAlgorithm,
+    bare: bool,
 ) -> String {
     let mut config = String::from("[core]\n");
     config.push_str(&format!(
@@ -273,7 +326,7 @@ fn config_contents(
         u8::from(object_format == cvx_object::HashAlgorithm::Sha256)
     ));
     config.push_str(&format!("\tfilemode = {filemode}\n"));
-    config.push_str("\tbare = false\n");
+    config.push_str(&format!("\tbare = {bare}\n"));
     config.push_str("\tlogallrefupdates = true\n");
     if ignorecase {
         config.push_str("\tignorecase = true\n");
@@ -359,6 +412,7 @@ mod tests {
             initial_branch: Some("trunk".to_owned()),
             storage: InitStorage::Cvx,
             object_format: cvx_object::HashAlgorithm::Sha1,
+            bare: false,
             quiet: true,
         })
         .expect("init");
@@ -390,6 +444,7 @@ mod tests {
             initial_branch: Some("main".to_owned()),
             storage: InitStorage::Cvx,
             object_format: cvx_object::HashAlgorithm::Sha1,
+            bare: false,
             quiet: true,
         };
         Repository::init(options.clone()).expect("first init");

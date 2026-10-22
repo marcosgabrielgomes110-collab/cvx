@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.5.0 work._
+_Post-0.6.0 work._
+
+## [0.6.0] - 2026-10-22
+
+### Added
+
+- Offset-delta pack writing, with bounded delta chains, and a full `gc
+  --prune` repack that removes superseded packs while respecting `.keep`.
+- Bare repository support: `cvx init --bare`, `cvx clone --bare`, bare
+  discovery, fetch/push, log, tag, fsck and gc.
+- Crash-recovery coverage for stash and hard reset, including failpoints around
+  stash publication.
+
+### Changed
+
+- `gc` now includes index entries, reflogs, stash refs and control references
+  in the reachable set before pruning.
+- Bare worktree operations fail explicitly instead of touching repository
+  internals.
 
 ## [0.5.0] - 2026-10-22
 

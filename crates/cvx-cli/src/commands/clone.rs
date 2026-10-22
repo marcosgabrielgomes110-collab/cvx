@@ -19,14 +19,23 @@ pub fn run(args: CloneArgs) -> Result<()> {
         storage: args.storage.into(),
         depth: args.depth,
         filter: args.filter,
+        bare: args.bare,
     })?;
 
-    println!(
-        "Checked out branch '{}' at {} ({} objects)",
-        outcome.branch,
-        outcome.head.short(7),
-        outcome.object_count
-    );
+    if outcome.repository.is_bare() {
+        println!(
+            "Cloned bare repository at {} ({} objects)",
+            outcome.head.short(7),
+            outcome.object_count
+        );
+    } else {
+        println!(
+            "Checked out branch '{}' at {} ({} objects)",
+            outcome.branch,
+            outcome.head.short(7),
+            outcome.object_count
+        );
+    }
     Ok(())
 }
 

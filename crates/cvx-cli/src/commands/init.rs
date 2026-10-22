@@ -10,6 +10,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         initial_branch: args.initial_branch,
         storage: args.storage.into(),
         object_format: args.object_format.into(),
+        bare: args.bare,
         quiet: args.quiet,
     })?;
 
@@ -25,11 +26,17 @@ pub fn run(args: InitArgs) -> Result<()> {
             "Detected existing Git repository in {control_dir}; CVX will use it in compatibility mode"
         );
     } else if outcome.was_created() {
-        match repository.kind() {
-            RepositoryKind::Cvx => {
+        match (repository.kind(), repository.is_bare()) {
+            (RepositoryKind::Cvx, true) => {
+                println!("Initialized empty bare CVX repository in {control_dir}");
+            }
+            (RepositoryKind::Git, true) => {
+                println!("Initialized empty bare Git repository in {control_dir}");
+            }
+            (RepositoryKind::Cvx, false) => {
                 println!("Initialized empty CVX repository in {control_dir}");
             }
-            RepositoryKind::Git => {
+            (RepositoryKind::Git, false) => {
                 println!("Initialized empty Git repository in {control_dir}");
             }
         }

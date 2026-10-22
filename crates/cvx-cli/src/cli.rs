@@ -198,6 +198,10 @@ pub struct InitArgs {
     #[arg(long, value_enum, default_value = "sha1", value_name = "FORMAT")]
     pub object_format: ObjectFormatArg,
 
+    /// Create a bare repository without a worktree.
+    #[arg(long)]
+    pub bare: bool,
+
     /// Suppress the summary.
     #[arg(short, long)]
     pub quiet: bool,
@@ -229,6 +233,10 @@ pub struct CloneArgs {
     /// Partial-clone filter, for example `blob:none`.
     #[arg(long, value_name = "FILTER")]
     pub filter: Option<String>,
+
+    /// Clone without a worktree.
+    #[arg(long)]
+    pub bare: bool,
 }
 
 /// Arguments for `cvx remote`.

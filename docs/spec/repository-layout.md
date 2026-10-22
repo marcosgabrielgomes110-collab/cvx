@@ -66,6 +66,9 @@ a later milestone; it is not exposed as a command yet.
 
 The first milestone rejects:
 
-- bare repositories (`core.bare = true`);
 - linked worktrees and submodule checkouts (`.git` is a file);
 - reftable reference storage.
+
+Bare repositories are supported when `core.bare = true`; their control
+directory is the repository root and commands that need a worktree fail
+explicitly.

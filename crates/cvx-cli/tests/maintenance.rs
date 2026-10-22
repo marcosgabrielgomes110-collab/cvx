@@ -108,6 +108,12 @@ fn gc_packs_loose_objects_and_prunes_unreachable_ones() {
     let fsck = env.cvx().arg("fsck").output().unwrap();
     assert!(fsck.status.success(), "{}", stderr(&fsck));
     assert!(stdout(&fsck).contains("Repository is healthy"));
+    let packs = std::fs::read_dir(env.path(".cvx/objects/pack"))
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "pack"))
+        .count();
+    assert_eq!(packs, 1, "gc --prune must leave one compact pack");
     env.assert_git_cvx_ok(&["fsck", "--strict"]);
 }
 
