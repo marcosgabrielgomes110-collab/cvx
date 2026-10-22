@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.7.0 work._
+_Post-0.7.1 work._
+
+## [0.7.1] - 2026-10-22
+
+### Fixed
+
+- Windows `gc --prune` no longer fails when replacing or deleting a pack that
+  was opened by the current process. Packs are reopened on demand and writes
+  with an already-present checksum are skipped.
 
 ## [0.7.0] - 2026-10-22
 

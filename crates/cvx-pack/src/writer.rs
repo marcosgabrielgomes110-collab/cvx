@@ -71,9 +71,14 @@ pub fn write_pack_with_algorithm(
     let stem = format!("pack-{}", built.checksum.to_hex());
     let pack_path = directory.join(format!("{stem}.pack"));
     let index_path = directory.join(format!("{stem}.idx"));
-    cvx_core::fs::write_atomic(&pack_path, &built.bytes, Some(0o444))?;
-    cvx_core::failpoint::hit("pack.before-index")?;
-    cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
+    // Replacing an existing pack on Windows fails while another process or
+    // reader has it open. The checksum names the content, so an existing pair
+    // is already the exact pack we would write.
+    if !(pack_path.is_file() && index_path.is_file()) {
+        cvx_core::fs::write_atomic(&pack_path, &built.bytes, Some(0o444))?;
+        cvx_core::failpoint::hit("pack.before-index")?;
+        cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
+    }
 
     Ok(PackWriteOutcome {
         pack_path,

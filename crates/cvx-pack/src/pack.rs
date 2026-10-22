@@ -28,7 +28,6 @@ pub struct PackObject {
 /// A packfile and its index.
 pub struct Pack {
     path: PathBuf,
-    file: RefCell<File>,
     file_len: u64,
     index: PackIndex,
     cache: RefCell<HashMap<u64, PackObject>>,
@@ -118,7 +117,6 @@ impl Pack {
 
         Ok(Self {
             path: pack_path,
-            file: RefCell::new(file),
             file_len,
             index,
             cache: RefCell::new(HashMap::new()),
@@ -324,7 +322,8 @@ impl Pack {
     }
 
     fn read_bytes(&self, offset: u64, buffer: &mut [u8]) -> Result<()> {
-        let mut file = self.file.borrow_mut();
+        let mut file = File::open(&self.path)
+            .map_err(|error| Error::io(self.path.display().to_string(), error))?;
         file.seek(SeekFrom::Start(offset))
             .map_err(|error| Error::io(self.path.display().to_string(), error))?;
         file.read_exact(buffer)
