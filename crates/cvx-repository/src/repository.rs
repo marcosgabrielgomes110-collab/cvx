@@ -522,6 +522,20 @@ impl Repository {
             }
         }
 
+        let alternates = self.control_dir.join("objects/info/alternates");
+        if alternates.is_file()
+            && !std::fs::read_to_string(&alternates)
+                .map(|contents| contents.trim().is_empty())
+                .unwrap_or(false)
+        {
+            return Err(Error::unsupported("object alternates"));
+        }
+        if std::env::var_os("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err(Error::unsupported("object alternates"));
+        }
+
         Ok(())
     }
 }
@@ -579,6 +593,16 @@ mod tests {
 
         let repository = Repository::open(&control).expect("open sha256");
         assert_eq!(repository.hash_algorithm(), HashAlgorithm::Sha256);
+    }
+
+    #[test]
+    fn rejects_object_alternates() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let control = temp.path().join(".cvx");
+        std::fs::create_dir_all(control.join("objects/info")).expect("mkdir");
+        std::fs::write(control.join("objects/info/alternates"), "/elsewhere\n").expect("write");
+        let result = Repository::open(&control);
+        assert!(matches!(result, Err(Error::Unsupported { .. })));
     }
 
     #[test]
