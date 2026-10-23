@@ -91,6 +91,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | CVX `fsck`, `gc`, reset, cherry-pick, revert and stash | Yes |
 | Hook lifecycle | Partial | Commit and pre-push hooks |
 | File-backed pack reads | Yes | Objects decompressed on demand |
+| Streamed pack writes | Yes | Clone/gc writes a temporary pack with incremental checksum |
 | SHA-256 over HTTPS/SSH | Yes | Protocol-v2 object-format negotiation |
 | Bare repositories | Yes | Git reads/writes refs and packs |
 | Read repositories packed by `git gc` | Yes |

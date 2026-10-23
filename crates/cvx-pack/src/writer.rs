@@ -66,16 +66,36 @@ pub fn write_pack_with_algorithm(
     let directory = directory.as_ref();
     cvx_core::fs::ensure_dir(directory)?;
 
-    let built = build_pack(inputs, algorithm)?;
+    let mut temp = tempfile::Builder::new()
+        .prefix(".cvx-pack-")
+        .tempfile_in(directory)
+        .map_err(|error| Error::io(directory.display().to_string(), error))?;
+    let built = build_pack_to(temp.as_file_mut(), inputs, algorithm)?;
+    temp.as_file()
+        .sync_all()
+        .map_err(|error| Error::io(temp.path().display().to_string(), error))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        temp.as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o444))
+            .map_err(|error| Error::io(temp.path().display().to_string(), error))?;
+    }
+
     let index = build_index(&built.index_entries, &built.checksum_bytes, algorithm);
     let stem = format!("pack-{}", built.checksum.to_hex());
     let pack_path = directory.join(format!("{stem}.pack"));
     let index_path = directory.join(format!("{stem}.idx"));
+
     // Replacing an existing pack on Windows fails while another process or
-    // reader has it open. The checksum names the content, so an existing pair
-    // is already the exact pack we would write.
-    if !(pack_path.is_file() && index_path.is_file()) {
-        cvx_core::fs::write_atomic(&pack_path, &built.bytes, Some(0o444))?;
+    // reader has it open. The checksum names the content, so an existing pack
+    // is already the exact file we would write.
+    if !pack_path.is_file() {
+        temp.persist(&pack_path)
+            .map_err(|error| Error::io(pack_path.display().to_string(), error.error))?;
+        cvx_core::fs::sync_parent(&pack_path)?;
+    }
+    if !index_path.is_file() {
         cvx_core::failpoint::hit("pack.before-index")?;
         cvx_core::fs::write_atomic(&index_path, &index, Some(0o444))?;
     }
@@ -98,18 +118,23 @@ pub fn encode_pack_with_algorithm(
     inputs: &[PackInput<'_>],
     algorithm: HashAlgorithm,
 ) -> Result<Vec<u8>> {
-    Ok(build_pack(inputs, algorithm)?.bytes)
+    let mut bytes = Vec::new();
+    build_pack_to(&mut bytes, inputs, algorithm)?;
+    Ok(bytes)
 }
 
 struct BuiltPack {
-    bytes: Vec<u8>,
     checksum: ObjectId,
     checksum_bytes: Vec<u8>,
     objects: Vec<PackedObject>,
     index_entries: Vec<(ObjectId, u32, u64)>,
 }
 
-fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<BuiltPack> {
+fn build_pack_to<W: Write>(
+    writer: &mut W,
+    inputs: &[PackInput<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<BuiltPack> {
     let mut objects: BTreeMap<ObjectId, (ObjectKind, &[u8])> = BTreeMap::new();
     for input in inputs {
         let oid = hash_object_with(algorithm, input.kind, input.data);
@@ -122,18 +147,28 @@ fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<Buil
         .collect();
     ordered.sort_by_key(|(oid, kind, data)| (kind_rank(*kind), data.len(), *oid));
 
-    let mut pack = Vec::new();
-    pack.extend_from_slice(b"PACK");
-    pack.extend_from_slice(&PACK_VERSION.to_be_bytes());
-    pack.extend_from_slice(&(ordered.len() as u32).to_be_bytes());
+    let mut hasher = crate::checksum::Hasher::new(algorithm);
+    let mut position = 0u64;
+    write_hashed(writer, &mut hasher, b"PACK", &mut position)?;
+    write_hashed(
+        writer,
+        &mut hasher,
+        &PACK_VERSION.to_be_bytes(),
+        &mut position,
+    )?;
+    write_hashed(
+        writer,
+        &mut hasher,
+        &(ordered.len() as u32).to_be_bytes(),
+        &mut position,
+    )?;
 
     let mut packed = Vec::with_capacity(ordered.len());
     let mut index_entries = Vec::with_capacity(ordered.len());
     let mut recent: Vec<Candidate<'_>> = Vec::new();
 
     for (oid, kind, data) in ordered {
-        let offset = pack.len() as u64;
-        let start = pack.len();
+        let offset = position;
         let full_header = object_header(kind, data.len() as u64)?;
         let full_compressed = compress(data)?;
         let mut best_size = full_header.len() + full_compressed.len();
@@ -178,20 +213,14 @@ fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<Buil
             }
         }
 
-        let depth = match chosen {
-            Some((bytes, depth)) => {
-                pack.extend_from_slice(&bytes);
-                depth
-            }
-            None => {
-                pack.extend_from_slice(&full_header);
-                pack.extend_from_slice(&full_compressed);
-                0
-            }
+        let (entry_bytes, depth) = match chosen {
+            Some((bytes, depth)) => (bytes, depth),
+            None => ([full_header, full_compressed].concat(), 0),
         };
+        write_hashed(writer, &mut hasher, &entry_bytes, &mut position)?;
 
         let mut crc = crc32fast::Hasher::new();
-        crc.update(&pack[start..]);
+        crc.update(&entry_bytes);
         let crc = crc.finalize();
 
         packed.push(PackedObject {
@@ -213,18 +242,33 @@ fn build_pack(inputs: &[PackInput<'_>], algorithm: HashAlgorithm) -> Result<Buil
 
     index_entries.sort_by_key(|(oid, _, _)| *oid);
 
-    let checksum_bytes = crate::checksum::checksum(algorithm, &pack);
+    let checksum_bytes = hasher.finalize();
+    writer
+        .write_all(&checksum_bytes)
+        .map_err(|error| Error::io("failed to write pack checksum", error))?;
     let checksum = ObjectId::from_slice(&checksum_bytes)
         .map_err(|error| Error::corrupt(format!("invalid pack checksum: {error}")))?;
-    pack.extend_from_slice(&checksum_bytes);
 
     Ok(BuiltPack {
-        bytes: pack,
         checksum,
         checksum_bytes,
         objects: packed,
         index_entries,
     })
+}
+
+fn write_hashed<W: Write>(
+    writer: &mut W,
+    hasher: &mut crate::checksum::Hasher,
+    bytes: &[u8],
+    position: &mut u64,
+) -> Result<()> {
+    writer
+        .write_all(bytes)
+        .map_err(|error| Error::io("failed to write packfile", error))?;
+    hasher.update(bytes);
+    *position = position.saturating_add(bytes.len() as u64);
+    Ok(())
 }
 
 fn worth_delta(base: &[u8], target: &[u8]) -> bool {

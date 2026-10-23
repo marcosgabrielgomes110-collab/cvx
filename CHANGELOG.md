@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.8.1 work._
+_Post-0.9.0 work._
+
+## [0.9.0] - 2026-10-23
+
+### Added
+
+- `cvx fsck --repair` rebuilds a missing or unreadable index from `HEAD` and
+  reports every repair explicitly.
+- Pack writing now streams through a temporary file with an incremental
+  checksum instead of building the complete pack in memory; clone and `gc`
+  repacks use this path.
+
+### Changed
+
+- Pack publication writes the pack before its index and keeps the
+  `pack.before-index` crash point.
+- `fsck` reports repairs separately from integrity errors.
 
 ## [0.8.1] - 2026-10-22
 

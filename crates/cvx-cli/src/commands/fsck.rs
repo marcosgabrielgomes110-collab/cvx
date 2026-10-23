@@ -1,5 +1,5 @@
 use cvx_core::{Error, Result};
-use cvx_repository::Repository;
+use cvx_repository::{FsckOptions, Repository};
 
 use crate::cli::FsckArgs;
 
@@ -7,7 +7,9 @@ use crate::cli::FsckArgs;
 pub fn run(args: FsckArgs) -> Result<()> {
     let cwd = std::env::current_dir().map_err(|error| Error::io("current directory", error))?;
     let repository = Repository::discover(&cwd)?;
-    let report = repository.fsck()?;
+    let report = repository.fsck_with_options(FsckOptions {
+        repair: args.repair,
+    })?;
 
     println!("Checked {} reachable objects", report.checked_objects);
     if !report.dangling.is_empty() {
@@ -18,6 +20,9 @@ pub fn run(args: FsckArgs) -> Result<()> {
         } else {
             println!("Dangling objects: {}", report.dangling.len());
         }
+    }
+    for repair in &report.repairs {
+        println!("Repaired: {repair}");
     }
     for error in &report.errors {
         eprintln!("error: {error}");

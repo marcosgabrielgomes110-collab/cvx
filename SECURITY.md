@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-CVX is currently in the `0.8.x` beta series. Security fixes are applied to the
+CVX is currently in the `0.9.x` beta series. Security fixes are applied to the
 `main` branch and to the latest published release.
 
 ## Reporting a vulnerability

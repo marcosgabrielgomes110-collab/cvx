@@ -101,6 +101,10 @@ need a worktree fail explicitly instead of writing inside the repository.
 while object payloads are read and decompressed from the `.pack` file on
 demand. Pack checksums are verified incrementally.
 
+`gc` and clone write packs through a temporary file using an incremental
+checksum, so the complete pack is not held in memory. Push still assembles its
+pack in memory and is tracked as remaining work.
+
 Fetch requests thin packs. Ref-delta bases missing from the incoming pack are
 resolved from the local object database; an unknown base is still rejected
 explicitly.
@@ -115,6 +119,12 @@ are skipped.
 `CVX_LOCK_TIMEOUT_MS` makes index and ref lock acquisition wait before failing.
 The default is zero. Diagnostics identify the lock path and explain how to
 remove a stale lock safely.
+
+## Index repair
+
+`cvx fsck --repair` rebuilds a missing or unreadable index from `HEAD` and
+reports the repair. It never deletes objects or rewrites refs. Bare
+repositories are not given a synthetic index.
 
 ## Release verification and signing
 

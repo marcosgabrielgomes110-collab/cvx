@@ -15,7 +15,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Streaming index/network, thin-pack generation and large-repo memory limits | Next — v0.9.0 |
+| 9 | Streaming index/network, thin-pack generation and large-repo memory limits | In progress — v0.9.0 |
 | 10 | Security, concurrency and durability | Planned — v0.10.0 |
 | 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
 | 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
@@ -170,6 +170,14 @@ Remaining:
 This phase is about making the engine safe for large repositories and real
 network traffic. It is the next release, not a feature-only milestone.
 
+Implemented in v0.9.0:
+
+- `cvx fsck --repair` rebuilds a missing or unreadable index from `HEAD`;
+- clone and `gc` pack writing streams through a temporary file with an
+  incremental checksum instead of holding the complete pack in memory;
+- pack publication remains ordered before index publication and preserves the
+  `pack.before-index` crash point.
+
 Delivered groundwork in v0.8.1:
 
 - commit lifecycle hooks (`pre-commit`, `commit-msg`, `post-commit`) and
@@ -182,7 +190,8 @@ Delivered groundwork in v0.8.1:
 
 - streaming index parsing and writing with bounded memory;
 - streaming or spooled HTTP/SSH response bodies and pack ingestion;
-- bounded-memory pack writing and object enumeration;
+- push-pack generation without holding the complete pack in memory;
+- object enumeration with an explicit memory budget;
 - incremental repack, pack reuse and delta/search heuristics comparable to Git;
 - benchmark and regression gates for 1M+ objects, long history and large
   binary files;
@@ -206,6 +215,8 @@ Delivered groundwork in v0.8.1:
 
 - a 1M-object repository can be cloned, fetched, packed and read within a
   documented memory ceiling;
+- pack writing for clone and `gc` is streamed (done); push-pack streaming and
+  index/network streaming remain;
 - thin-pack generation is covered by push tests against a real Git server;
 - SHA-256 clone/fetch/push pass against local HTTP and SSH servers;
 - large-repository benchmarks run in CI with an explicit memory budget.

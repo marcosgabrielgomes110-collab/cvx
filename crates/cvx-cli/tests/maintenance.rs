@@ -311,3 +311,29 @@ fn reset_pathspec_updates_only_selected_index_entries() {
         .failure()
         .stderr(predicate::str::contains("did not match"));
 }
+
+#[test]
+fn fsck_repair_rebuilds_a_corrupt_or_missing_index() {
+    let env = TestEnv::new();
+    env.cvx().arg("init").assert().success();
+    env.write("a.txt", "content\n");
+    env.cvx().args(["add", "."]).assert().success();
+    env.cvx().args(["commit", "-m", "base"]).assert().success();
+
+    std::fs::write(env.path(".cvx/index"), b"not an index").unwrap();
+    env.cvx().arg("fsck").assert().failure();
+    env.cvx()
+        .arg("fsck")
+        .arg("--repair")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Repaired"));
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+
+    std::fs::remove_file(env.path(".cvx/index")).unwrap();
+    env.cvx().arg("fsck").arg("--repair").assert().success();
+    let status = env.cvx().args(["status", "--porcelain"]).output().unwrap();
+    assert_eq!(normalize(&status), "");
+    env.assert_git_cvx_ok(&["fsck", "--strict"]);
+}

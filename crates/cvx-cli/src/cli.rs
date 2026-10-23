@@ -143,6 +143,10 @@ pub struct FsckArgs {
     /// Treat warnings as errors.
     #[arg(long)]
     pub strict: bool,
+
+    /// Rebuild a missing or unreadable index from HEAD.
+    #[arg(long)]
+    pub repair: bool,
 }
 
 /// Arguments for `cvx gc`.

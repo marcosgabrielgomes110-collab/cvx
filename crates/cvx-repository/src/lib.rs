@@ -37,7 +37,7 @@ pub use cvx_object::{HashAlgorithm, ObjectId, Signature};
 pub use cvx_ref::Head;
 pub use cvx_revision::LogEntry;
 pub use diff::DiffOptions;
-pub use fsck::FsckReport;
+pub use fsck::{FsckOptions, FsckReport};
 pub use gc::GcReport;
 pub use init::{InitOptions, InitOutcome, InitStorage};
 pub use log::LogOptions;

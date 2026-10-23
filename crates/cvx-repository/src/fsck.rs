@@ -1,10 +1,18 @@
 use std::collections::BTreeSet;
 
 use cvx_core::Result;
-use cvx_index::Index;
+use cvx_index::{Index, IndexLock};
 use cvx_object::{Commit, ObjectId, ObjectKind, Tag, Tree};
 
 use crate::Repository;
+use crate::switch::TreeSnapshot;
+
+/// Options for `cvx fsck`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FsckOptions {
+    /// Rebuild a missing or unreadable index from `HEAD`.
+    pub repair: bool,
+}
 
 /// Result of an integrity check over a repository.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +23,8 @@ pub struct FsckReport {
     pub dangling: Vec<ObjectId>,
     /// Human-readable integrity errors.
     pub errors: Vec<String>,
+    /// Repairs performed by `--repair`.
+    pub repairs: Vec<String>,
 }
 
 impl FsckReport {
@@ -30,7 +40,13 @@ impl Repository {
     /// The check is read-only. Missing or mismatched objects are reported in
     /// [`FsckReport::errors`] instead of aborting at the first problem.
     pub fn fsck(&self) -> Result<FsckReport> {
+        self.fsck_with_options(FsckOptions::default())
+    }
+
+    /// Verifies the repository and optionally repairs a missing/corrupt index.
+    pub fn fsck_with_options(&self, options: FsckOptions) -> Result<FsckReport> {
         let mut state = FsckState::default();
+        let mut repairs = Vec::new();
 
         if let Ok(head) = self.head()
             && let Some(oid) = head.oid()
@@ -56,20 +72,45 @@ impl Repository {
         }
 
         let mut indexed = BTreeSet::new();
-        match Index::read_from_with_algorithm(&self.index_path(), self.hash_algorithm()) {
-            Ok(Some(index)) => {
-                for entry in index.entries() {
-                    indexed.insert(entry.oid);
-                    state.ensure(
-                        self,
-                        entry.oid,
-                        Some(ObjectKind::Blob),
-                        &format!("index path {}", String::from_utf8_lossy(&entry.path)),
-                    );
+        let existing = Index::read_from_with_algorithm(&self.index_path(), self.hash_algorithm());
+        let index = match existing {
+            Ok(Some(index)) => Some(index),
+            Ok(None) if options.repair && !self.is_bare() => match self.repair_index() {
+                Ok(index) => {
+                    repairs.push("rebuilt missing index from HEAD".to_owned());
+                    Some(index)
                 }
+                Err(error) => {
+                    state.errors.push(format!("cannot rebuild index: {error}"));
+                    None
+                }
+            },
+            Ok(None) => None,
+            Err(error) if options.repair && !self.is_bare() => match self.repair_index() {
+                Ok(index) => {
+                    repairs.push(format!("rebuilt unreadable index from HEAD: {error}"));
+                    Some(index)
+                }
+                Err(error) => {
+                    state.errors.push(format!("cannot rebuild index: {error}"));
+                    None
+                }
+            },
+            Err(error) => {
+                state.errors.push(format!("cannot read index: {error}"));
+                None
             }
-            Ok(None) => {}
-            Err(error) => state.errors.push(format!("cannot read index: {error}")),
+        };
+        if let Some(index) = index {
+            for entry in index.entries() {
+                indexed.insert(entry.oid);
+                state.ensure(
+                    self,
+                    entry.oid,
+                    Some(ObjectKind::Blob),
+                    &format!("index path {}", String::from_utf8_lossy(&entry.path)),
+                );
+            }
         }
 
         let mut dangling = Vec::new();
@@ -90,7 +131,25 @@ impl Repository {
             checked_objects: state.checked_objects,
             dangling,
             errors: state.errors,
+            repairs,
         })
+    }
+
+    fn repair_index(&self) -> Result<Index> {
+        let snapshot: TreeSnapshot = match self.head()?.oid() {
+            Some(oid) => {
+                let commit = self.read_commit(oid)?;
+                self.read_tree_recursive(commit.tree)?
+                    .into_iter()
+                    .map(|(path, leaf)| (path, (leaf.mode, leaf.oid)))
+                    .collect()
+            }
+            None => TreeSnapshot::new(),
+        };
+        let index = self.index_from_snapshot(&snapshot)?;
+        let lock = IndexLock::acquire(self.control_dir())?;
+        lock.commit(&index)?;
+        Ok(index)
     }
 }
 
