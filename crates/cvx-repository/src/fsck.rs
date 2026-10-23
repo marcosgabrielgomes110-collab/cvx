@@ -141,11 +141,13 @@ impl Repository {
     }
 
     fn repair_stale_locks(&self, repairs: &mut Vec<String>) {
-        let threshold = std::env::var("CVX_STALE_LOCK_AGE_SECS")
+        let Some(threshold) = std::env::var("CVX_STALE_LOCK_AGE_SECS")
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
             .map(Duration::from_secs)
-            .unwrap_or_else(|| Duration::from_secs(60 * 60));
+        else {
+            return;
+        };
         let mut paths = Vec::new();
         for name in [
             "index.lock",

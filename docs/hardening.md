@@ -121,7 +121,9 @@ are skipped.
 
 `CVX_LOCK_TIMEOUT_MS` makes index and ref lock acquisition wait before failing.
 The default is zero. Diagnostics identify the lock path and explain how to
-remove a stale lock safely.
+remove a stale lock safely. `fsck --repair` only removes lock files when
+`CVX_STALE_LOCK_AGE_SECS` is explicitly set; the default is to leave them in
+place because lock files carry no reliable owner identity.
 
 ## Index repair
 
