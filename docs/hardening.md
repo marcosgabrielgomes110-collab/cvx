@@ -141,6 +141,16 @@ $ CVX_SOAK_ITERATIONS=200 CVX_SOAK_JOBS=4 scripts/soak.sh
 It is intentionally opt-in because it is a long-running test rather than a
 unit test.
 
+## Network timeouts and SSH host keys
+
+HTTP uses `CVX_HTTP_TIMEOUT_SECS` (default 120) and `CVX_HTTP_RETRIES`
+(default 2) for idempotent GET and byte-body POST requests. Streaming push
+bodies are not retried automatically.
+
+SSH accepts `CVX_SSH_STRICT_HOST_KEY_CHECKING=yes|no|accept-new` (default
+`accept-new`). Production deployments should set `yes` and provision
+`known_hosts` explicitly.
+
 ## Release verification and signing
 
 Release workflows verify every checksum before publishing. When the

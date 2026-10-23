@@ -107,6 +107,7 @@ pub struct HttpTransport {
     host: String,
     auth: Option<String>,
     agent: ureq::Agent,
+    retries: u32,
 }
 
 impl HttpTransport {
@@ -123,8 +124,17 @@ impl HttpTransport {
                 BASE64.encode(format!("{}:{}", credential.username, credential.password))
             )
         });
+        let timeout = std::env::var("CVX_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(120);
+        let retries = std::env::var("CVX_HTTP_RETRIES")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(2);
         let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(timeout))
             .redirects(0)
             .user_agent(AGENT)
             .build();
@@ -133,6 +143,7 @@ impl HttpTransport {
             host: parsed.host,
             auth,
             agent,
+            retries,
         })
     }
 
@@ -438,15 +449,26 @@ impl HttpTransport {
     }
 
     fn get(&self, url: &str, protocol_v2: bool) -> Result<Vec<u8>> {
-        let mut request = self.agent.get(url);
-        if let Some(auth) = &self.auth {
-            request = request.set("Authorization", auth);
+        let mut last_error = None;
+        for attempt in 0..=self.retries {
+            let mut request = self.agent.get(url);
+            if let Some(auth) = &self.auth {
+                request = request.set("Authorization", auth);
+            }
+            if protocol_v2 {
+                request = request.set("Git-Protocol", "version=2");
+            }
+            match request.call() {
+                Ok(response) => return read_body(response),
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt < self.retries {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            }
         }
-        if protocol_v2 {
-            request = request.set("Git-Protocol", "version=2");
-        }
-        let response = request.call().map_err(|error| http_error(url, error))?;
-        read_body(response)
+        Err(http_error(url, last_error.expect("at least one attempt")))
     }
 
     fn post(
@@ -456,17 +478,26 @@ impl HttpTransport {
         body: &[u8],
         protocol_v2: bool,
     ) -> Result<Vec<u8>> {
-        let mut request = self.agent.post(url).set("Content-Type", content_type);
-        if let Some(auth) = &self.auth {
-            request = request.set("Authorization", auth);
+        let mut last_error = None;
+        for attempt in 0..=self.retries {
+            let mut request = self.agent.post(url).set("Content-Type", content_type);
+            if let Some(auth) = &self.auth {
+                request = request.set("Authorization", auth);
+            }
+            if protocol_v2 {
+                request = request.set("Git-Protocol", "version=2");
+            }
+            match request.send_bytes(body) {
+                Ok(response) => return read_body(response),
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt < self.retries {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            }
         }
-        if protocol_v2 {
-            request = request.set("Git-Protocol", "version=2");
-        }
-        let response = request
-            .send_bytes(body)
-            .map_err(|error| http_error(url, error))?;
-        read_body(response)
+        Err(http_error(url, last_error.expect("at least one attempt")))
     }
 }
 

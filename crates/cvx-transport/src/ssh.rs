@@ -28,6 +28,7 @@ pub struct SshTransport {
     path: String,
     ssh_command: String,
     key: Option<String>,
+    host_key_checking: String,
 }
 
 impl SshTransport {
@@ -37,6 +38,10 @@ impl SshTransport {
         let key = std::env::var("CVX_SSH_KEY")
             .ok()
             .filter(|value| !value.is_empty());
+        let host_key_checking = std::env::var("CVX_SSH_STRICT_HOST_KEY_CHECKING")
+            .ok()
+            .filter(|value| matches!(value.as_str(), "yes" | "no" | "accept-new"))
+            .unwrap_or_else(|| "accept-new".to_owned());
 
         if let Some(rest) = url.strip_prefix("ssh://") {
             let (authority, path) = rest
@@ -51,6 +56,7 @@ impl SshTransport {
                 path: format!("/{path}"),
                 ssh_command,
                 key,
+                host_key_checking,
             });
         }
 
@@ -64,6 +70,7 @@ impl SshTransport {
                 path: path.to_owned(),
                 ssh_command,
                 key,
+                host_key_checking,
             });
         }
 
@@ -328,7 +335,7 @@ impl SshTransport {
             .arg("-o")
             .arg("BatchMode=yes")
             .arg("-o")
-            .arg("StrictHostKeyChecking=accept-new")
+            .arg(format!("StrictHostKeyChecking={}", self.host_key_checking))
             .arg("-o")
             .arg("SendEnv=GIT_PROTOCOL")
             .env("GIT_PROTOCOL", "version=2");
