@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, IoResultExt, Result};
@@ -806,13 +805,27 @@ impl Repository {
 
     fn append_config(&self, text: &str) -> Result<()> {
         let path = self.control_dir().join("config");
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .path_context(&path)?;
-        file.write_all(text.as_bytes()).path_context(&path)?;
-        file.flush().path_context(&path)
+        let lock_path = self.control_dir().join("config.lock");
+        let _lock = cvx_core::fs::create_lock_file(&lock_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "another CVX process is updating repository config ({}); remove the lock if no process is active",
+                    lock_path.display()
+                ))
+            } else {
+                Error::io(lock_path.display().to_string(), error)
+            }
+        })?;
+        let current = match std::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(Error::io(path.display().to_string(), error)),
+        };
+        let mut contents = current;
+        contents.push_str(text);
+        let result = cvx_core::fs::write_atomic(&path, contents.as_bytes(), Some(0o644));
+        let _ = std::fs::remove_file(&lock_path);
+        result
     }
 }
 
