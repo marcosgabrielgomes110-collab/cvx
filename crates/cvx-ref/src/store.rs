@@ -237,26 +237,32 @@ impl RefStore {
 
     fn remove_packed_ref(&self, name: &str) -> Result<()> {
         let path = self.git_dir.join("packed-refs");
+        let lock_path = self.git_dir.join("packed-refs.lock");
+        let mut lock = cvx_core::fs::create_lock_file(&lock_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "unable to create '{}': another process may be packing references",
+                    lock_path.display()
+                ))
+            } else {
+                Error::io(lock_path.display().to_string(), error)
+            }
+        })?;
+
         if !path.exists() {
+            drop(lock);
+            let _ = std::fs::remove_file(&lock_path);
             return Ok(());
         }
 
-        let contents = cvx_core::fs::read_to_string(&path)?;
-        let lock_path = self.git_dir.join("packed-refs.lock");
-        let mut lock = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-            .map_err(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    Error::Message(format!(
-                        "unable to create '{}': another process may be packing references",
-                        lock_path.display()
-                    ))
-                } else {
-                    Error::io(lock_path.display().to_string(), error)
-                }
-            })?;
+        let contents = match cvx_core::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(error) => {
+                drop(lock);
+                let _ = std::fs::remove_file(&lock_path);
+                return Err(error);
+            }
+        };
 
         let mut output = String::new();
         let mut changed = false;
