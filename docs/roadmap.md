@@ -15,7 +15,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Streaming index/network and large-repository memory limits | In progress — v0.9.1 |
+| 9 | Streaming index/network and large-repository memory limits | Complete — v0.9.2 |
 | 10 | Security, concurrency and durability | Planned — v0.10.0 |
 | 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
 | 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
@@ -170,7 +170,7 @@ Remaining:
 This phase is about making the engine safe for large repositories and real
 network traffic. It is the next release, not a feature-only milestone.
 
-Implemented in v0.9.0/v0.9.1:
+Implemented through v0.9.2:
 
 - `cvx fsck --repair` rebuilds a missing or unreadable index from `HEAD`;
 - clone and `gc` pack writing streams through a temporary file with an
@@ -179,7 +179,11 @@ Implemented in v0.9.0/v0.9.1:
   `pack.before-index` crash point;
 - network push emits thin packs against remote-known bases and falls back when
   the server does not advertise `thin-pack`;
-- `push --force-with-lease` validates the local remote-tracking ref.
+- `push --force-with-lease` validates the local remote-tracking ref;
+- streaming index reads with incremental checksum;
+- spooled HTTP/SSH fetch response bodies and push packs streamed from disk;
+- opt-in 1M-file benchmark with an address-space ceiling;
+- end-to-end SHA-256 HTTP clone and thin-pack push against `git-http-backend`.
 
 Delivered groundwork in v0.8.1:
 
@@ -189,38 +193,15 @@ Delivered groundwork in v0.8.1:
 - `cvx reset <REV> -- <PATH>...` for pathspec index resets;
 - integration coverage for hooks, lock timeout and reset pathspecs.
 
-### Streaming and scale
+### Known limitations after v0.9.2
 
-- streaming index parsing and writing with bounded memory;
-- streaming or spooled HTTP/SSH response bodies and pack ingestion;
-- push-pack generation without holding the complete pack in memory;
-- object enumeration with an explicit memory budget;
-- incremental repack, pack reuse and delta/search heuristics comparable to Git;
-- benchmark and regression gates for 1M+ objects, long history and large
-  binary files;
-- documented memory budgets and failure behavior under pressure.
-
-### Network and wire protocol
-
-- end-to-end SHA-256 tests against real HTTPS and SSH Git servers;
-- fetch negotiation with `have`/`ack`, bounded `want` sets and incremental
-  packs;
-- protocol coverage for side-band, push options, atomic push and
-  `force-with-lease`;
-- retries, timeouts, connection reuse, proxy support and custom TLS roots;
-- shallow fetch updates, `--unshallow` and partial-clone filters beyond
-  `blob:none`;
-- network chaos tests: truncation, redirects, expired tokens, rate limits and
-  interrupted pack streams.
-
-### Exit criteria for 0.9.0
-
-- a 1M-object repository can be cloned, fetched, packed and read within a
-  documented memory ceiling;
-- pack writing for clone and `gc` is streamed (done); push-pack streaming and
-  index/network streaming remain;
-- SHA-256 clone/fetch/push pass against local HTTP and SSH servers;
-- large-repository benchmarks run in CI with an explicit memory budget.
+- object ingestion still reads the spooled pack once before writing objects;
+  callback-streamed ingestion is deferred;
+- the 1M-file benchmark is opt-in and not part of the default CI matrix;
+- SHA-256 end-to-end coverage exists for HTTP; SSH uses the same protocol path
+  but still needs a dedicated server fixture;
+- incremental repack, `have`/`ack`, shallow update/unshallow, proxy/TLS and
+  network chaos stay in Phase 10/11 hardening.
 
 ## Phase 10 — security, concurrency and durability (v0.10.0)
 
@@ -236,6 +217,18 @@ Delivered groundwork in v0.8.1:
 - explicit reflog retention policy in `gc` and an option to opt out of pruning;
 - durability review on Windows and network filesystems (fsync, replace and
   directory synchronization semantics).
+
+### Network hardening
+
+- end-to-end SHA-256 SSH fixtures;
+- fetch negotiation with `have`/`ack`, bounded `want` sets and incremental
+  packs;
+- side-band, push options, atomic push and `force-with-lease` coverage;
+- retries, timeouts, connection reuse, proxy support and custom TLS roots;
+- shallow fetch updates, `--unshallow` and partial-clone filters beyond
+  `blob:none`;
+- network chaos tests: truncation, redirects, expired tokens, rate limits and
+  interrupted pack streams.
 
 ### Security and supply chain
 

@@ -101,9 +101,10 @@ need a worktree fail explicitly instead of writing inside the repository.
 while object payloads are read and decompressed from the `.pack` file on
 demand. Pack checksums are verified incrementally.
 
-`gc` and clone write packs through a temporary file using an incremental
-checksum, so the complete pack is not held in memory. Push still assembles its
-pack in memory and is tracked as remaining work.
+`gc`, clone and push write packs through a temporary file using an incremental
+checksum, so the complete compressed pack is not held in memory. Index reads
+use bounded buffers, and HTTP/SSH fetch bodies are spooled to a temporary pack
+file while pkt-lines are parsed.
 
 Fetch requests thin packs. Ref-delta bases missing from the incoming pack are
 resolved from the local object database; an unknown base is still rejected

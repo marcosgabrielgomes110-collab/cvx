@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.9.1 work._
+_Post-0.9.2 work._
+
+## [0.9.2] - 2026-10-23
+
+### Added
+
+- Streaming index reads with bounded buffers and incremental checksum
+  verification.
+- Spooled HTTP/SSH fetch responses: pack data is written to a temporary file
+  while pkt-lines are parsed, instead of buffering the whole response.
+- Push packs are written to a temporary file and streamed through HTTP/SSH
+  receive-pack.
+- Opt-in 1M-file benchmark selection and memory-ceiling script.
+- End-to-end SHA-256 HTTP clone and thin-pack push tests against a local
+  `git-http-backend`.
+
+### Changed
+
+- Phase 9 is closed for the scoped streaming/network work; remaining network
+  hardening is tracked in Phase 10/11 and the v1.0 release criteria.
 
 ## [0.9.1] - 2026-10-23
 

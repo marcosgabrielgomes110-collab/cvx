@@ -399,6 +399,10 @@ impl HttpTransport {
         body.extend(flush());
         let pack = File::open(pack_path)
             .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        let content_length = body.len() as u64
+            + std::fs::metadata(pack_path)
+                .map_err(|error| Error::io(pack_path.display().to_string(), error))?
+                .len();
         let reader = Cursor::new(body).chain(pack);
         let url = format!("{}/git-receive-pack", self.base);
         let response = self.post_reader(
@@ -406,6 +410,7 @@ impl HttpTransport {
             "application/x-git-receive-pack-request",
             reader,
             false,
+            Some(content_length),
         )?;
         parse_push_response(&response)
     }
@@ -416,6 +421,7 @@ impl HttpTransport {
         content_type: &str,
         body: impl Read,
         protocol_v2: bool,
+        content_length: Option<u64>,
     ) -> Result<Vec<u8>> {
         let mut request = self.agent.post(url).set("Content-Type", content_type);
         if let Some(auth) = &self.auth {
@@ -423,6 +429,9 @@ impl HttpTransport {
         }
         if protocol_v2 {
             request = request.set("Git-Protocol", "version=2");
+        }
+        if let Some(length) = content_length {
+            request = request.set("Content-Length", &length.to_string());
         }
         let response = request.send(body).map_err(|error| http_error(url, error))?;
         read_body(response)
