@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.9.3 work._
+_Post-0.9.4 work._
+
+## [0.9.4] - 2026-10-23
+
+### Security
+
+- Reject case-insensitive `.git`/`.cvx` path components and Windows-invalid
+  separators, reserved names and device paths before worktree writes.
+- Bound delta output growth, pack object counts, total inflated pack size,
+  tree expansion and the decoded pack cache.
+- Scope environment tokens to allowed hosts, reject credentials embedded in
+  remote URLs, and refuse credentials over plaintext HTTP.
+- Serialize `gc` with a repository lock and prune only loose objects present
+  before its reachability snapshot.
+- Use the commit parent as the ref CAS expectation, preventing concurrent
+  commit lost updates.
+- Refuse to overwrite dirty non-bare remotes and acquire the index lock before
+  checkout.
+- Lock `packed-refs` before read-modify-write and make config appends atomic.
+- Require an explicit stale-lock age before `fsck --repair` removes locks.
+- Detect and reject object alternates explicitly.
+
+### Changed
+
+- Release workflow runs tests/clippy before builds, verifies tag/version
+  equality, and includes license files in archives.
 
 ## [0.9.3] - 2026-10-23
 

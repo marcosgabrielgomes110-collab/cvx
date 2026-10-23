@@ -16,7 +16,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
 | 9 | Streaming index/network and large-repository memory limits | Complete — v0.9.2 |
-| 10 | Security, concurrency and durability | In progress — v0.9.3 |
+| 10 | Security, concurrency and durability | In progress — v0.9.4 |
 | 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
 | 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
 | 13 | Production release | Planned — v1.0.0 |
@@ -204,12 +204,18 @@ Delivered groundwork in v0.8.1:
 
 ## Phase 10 — security, concurrency and durability (v0.10.0)
 
-Implemented in v0.9.3:
+Implemented in v0.9.3/v0.9.4:
 
-- stale-lock repair through `fsck --repair` with an age threshold;
+- stale-lock repair through `fsck --repair` with an explicit age threshold;
 - opt-in soak script with concurrent status readers;
 - HTTP timeout/retry controls and SSH strict host-key policy;
-- threat model, release checklist and SBOM generation.
+- threat model, release checklist and SBOM generation;
+- case-insensitive/Windows path hardening and bounded parser/cache growth;
+- host-scoped tokens, rejection of URL credentials and plaintext HTTP auth;
+- serialized gc with a loose-object snapshot;
+- stale-parent commit rejection and dirty-remote push protection;
+- locked `packed-refs` deletion and atomic config appends;
+- explicit object-alternates rejection.
 
 ### Data safety and concurrency
 

@@ -10,7 +10,7 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: 0.9.3 release.** The local core, history editing, maintenance,
+> **Status: 0.9.4 release.** The local core, history editing, maintenance,
 > merge, HTTPS/SSH transport, GitHub workflows, bare repositories, file-backed
 > pack reads and thin-pack ingestion are implemented. This includes delta
 > packs, SHA-256 protocol negotiation, property-based fuzzing, crash failpoints,
@@ -308,7 +308,7 @@ use the file backend).
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs and SHA-256 network negotiation | Complete — v0.7.1 |
 | 9 | Streaming index/network and large-repository memory limits | Complete — v0.9.2 |
-| 10 | Security, concurrency and durability | In progress — v0.9.3 |
+| 10 | Security, concurrency and durability | In progress — v0.9.4 |
 | 11 | Git completeness, GitHub surface and packaging | Planned — v0.11.0 |
 | 12 | Release candidate and real-repository soak tests | Planned — v1.0.0-rc.1 |
 | 13 | Production release | Planned — v1.0.0 |
