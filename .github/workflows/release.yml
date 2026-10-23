@@ -9,8 +9,28 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Release checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install Linux keychain dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace --lib --bins --tests --locked
+
   build:
     name: Build (${{ matrix.os }})
+    needs: test
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -44,7 +64,9 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           archive="cvx-${RUNNER_OS}-${RUNNER_ARCH}.tar.gz"
-          tar -czf "$archive" -C target/release cvx
+          mkdir -p dist
+          cp target/release/cvx LICENSE-MIT LICENSE-APACHE README.md dist/
+          tar -czf "$archive" -C dist cvx LICENSE-MIT LICENSE-APACHE README.md
           shasum -a 256 "$archive" > "$archive.sha256"
 
       - name: Package (Windows)
@@ -52,7 +74,9 @@ jobs:
         shell: pwsh
         run: |
           $archive = "cvx-$env:RUNNER_OS-$env:RUNNER_ARCH.zip"
-          Compress-Archive -Path target/release/cvx.exe -DestinationPath $archive
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item target/release/cvx.exe, LICENSE-MIT, LICENSE-APACHE, README.md dist/
+          Compress-Archive -Path dist/* -DestinationPath $archive
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
           "$hash  $archive" | Out-File "$archive.sha256" -Encoding ascii
 
@@ -92,6 +116,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Verify tag matches workspace version
+        shell: bash
+        run: |
+          version=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
+          test "v$version" = "$GITHUB_REF_NAME" || {
+            echo "tag $GITHUB_REF_NAME does not match version $version" >&2
+            exit 1
+          }
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
