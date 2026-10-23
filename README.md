@@ -5,6 +5,7 @@
 [![CI](https://github.com/marcosgabrielgomes110-collab/cvx/actions/workflows/ci.yml/badge.svg)](https://github.com/marcosgabrielgomes110-collab/cvx/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Docs](https://img.shields.io/badge/docs-live-white.svg)](https://marcosgabrielgomes110-collab.github.io/cvx/)
 
 CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
@@ -264,6 +265,7 @@ scenario table are in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Documentation
 
+- [Live documentation](https://marcosgabrielgomes110-collab.github.io/cvx/)
 - [Documentation index](docs/README.md)
 - [Architecture and Mermaid diagrams](docs/architecture.md)
 - [Workflows and sequence diagrams](docs/workflows.md)

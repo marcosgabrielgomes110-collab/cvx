@@ -2,6 +2,7 @@
 
 Start here:
 
+- [Live documentation](https://marcosgabrielgomes110-collab.github.io/cvx/)
 - [Architecture with Mermaid diagrams](architecture.md)
 - [Workflows and sequence diagrams](workflows.md)
 - [Compatibility matrix](compatibility.md)

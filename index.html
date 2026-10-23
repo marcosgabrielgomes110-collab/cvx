@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#08090a">
+  <meta name="description" content="CVX documentation — a Git-compatible version control engine written in Rust. Learn installation, commands, architecture, security and release status.">
+  <title>CVX Documentation</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="CVX documentation home">
+      <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="31" height="31" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M23.6 11.8a8.7 8.7 0 1 0 0 12.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">CVX</span>
+      <span class="brand-sub">Documentation</span>
+    </a>
+
+    <div class="top-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search documentation">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13.2 13.2 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Search docs</span>
+        <kbd>⌘ K</kbd>
+      </button>
+      <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
+        <svg class="icon-sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6 16 16M16 4l-1.4 1.4M5.4 14.6 4 16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg class="icon-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.7 12.6A7.4 7.4 0 0 1 7.4 3.3a7.4 7.4 0 1 0 9.3 9.3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </button>
+      <a class="github-link" href="https://github.com/marcosgabrielgomes110-collab/cvx" rel="noreferrer">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.8a8.2 8.2 0 0 0-2.6 16c.4.1.6-.2.6-.4v-1.5c-2.3.5-2.8-1-2.8-1-.4-1-.9-1.2-.9-1.2-.8-.5.1-.5.1-.5.9.1 1.4.9 1.4.9.8 1.3 2 .9 2.5.7.1-.6.3-1 .6-1.2-1.9-.2-3.8-.9-3.8-4.1 0-.9.3-1.6.8-2.2-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.7 7.7 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.5 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.2 0 3.2-1.9 3.9-3.8 4.1.3.3.6.8.6 1.6v2.4c0 .2.2.5.6.4A8.2 8.2 0 0 0 10 1.8Z" fill="currentColor"/></svg>
+        <span>GitHub</span>
+      </a>
+      <button class="icon-button menu-button" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <nav aria-label="Documentation navigation">
+        <div class="nav-group">
+          <p class="nav-label">Get started</p>
+          <a class="nav-link" href="#overview">Overview</a>
+          <a class="nav-link" href="#quickstart">Quick start</a>
+          <a class="nav-link" href="#commands">Commands</a>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">Understand</p>
+          <a class="nav-link" href="#architecture">Architecture</a>
+          <a class="nav-link" href="#objects">Objects and refs</a>
+          <a class="nav-link" href="#network">Network and auth</a>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">Operate</p>
+          <a class="nav-link" href="#github">GitHub</a>
+          <a class="nav-link" href="#compatibility">Compatibility</a>
+          <a class="nav-link" href="#security">Security</a>
+          <a class="nav-link" href="#roadmap">Roadmap</a>
+        </div>
+        <div class="nav-status">
+          <div class="status-row"><span class="status-dot"></span><span>v0.9.4 · beta</span></div>
+          <p>Phase 10 is in progress. CVX is not yet recommended for critical production data.</p>
+          <a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/roadmap.md" rel="noreferrer">Read the roadmap <span aria-hidden="true">↗</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="content" id="content">
+      <article>
+        <header class="page-head" id="top">
+          <div class="meta-line">
+            <span class="badge">v0.9.4</span>
+            <span class="meta-sep"></span>
+            <span>Beta</span>
+            <span class="meta-sep"></span>
+            <span>Updated October 23, 2026</span>
+          </div>
+          <h1>CVX Documentation</h1>
+          <p class="lede">A Git-compatible version control engine written in Rust. Own your history, keep your data portable, and use the same repository format as Git without a runtime dependency on the Git binary.</p>
+          <div class="head-actions">
+            <a class="button button-primary" href="#quickstart">Quick start</a>
+            <a class="button" href="https://github.com/marcosgabrielgomes110-collab/cvx/releases" rel="noreferrer">Download v0.9.4</a>
+          </div>
+        </header>
+
+        <section class="intro-grid" aria-label="Project summary">
+          <div class="terminal" aria-label="Quick install example">
+            <div class="terminal-bar">
+              <span class="terminal-title">Terminal</span>
+              <button class="copy-button" type="button" data-copy-target="hero-code">Copy</button>
+            </div>
+            <pre><code id="hero-code"><span class="prompt">$</span> git clone https://github.com/marcosgabrielgomes110-collab/cvx
+<span class="prompt">$</span> cd cvx
+<span class="prompt">$</span> cargo build --release -p cvx-cli
+<span class="prompt">$</span> ./target/release/cvx init .
+<span class="prompt">$</span> ./target/release/cvx add .
+<span class="prompt">$</span> ./target/release/cvx commit -m <span class="str">"first commit"</span></code></pre>
+          </div>
+          <div class="summary">
+            <p class="summary-title">Built for compatibility</p>
+            <p>CVX stores standard Git objects, indexes and refs in <code>.cvx/</code>. Git can read the same repository with <code>--git-dir=.cvx</code>, and CVX can open existing <code>.git/</code> repositories directly.</p>
+            <dl class="facts">
+              <div><dt>Object formats</dt><dd>SHA-1 and SHA-256</dd></div>
+              <div><dt>Transports</dt><dd>local, HTTPS, SSH</dd></div>
+              <div><dt>Control directory</dt><dd><code>.cvx/</code> or <code>.git/</code></dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <div class="callout callout-status">
+          <div class="callout-icon" aria-hidden="true">!</div>
+          <div>
+            <p class="callout-title">Production status: beta</p>
+            <p>CVX is usable for local workflows and controlled automation, but Phase 10 is still open. Do not use it as the only copy of critical production data. Read the <a href="#roadmap">roadmap</a> and the <a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/compatibility.md" rel="noreferrer">compatibility matrix</a> before adopting it.</p>
+          </div>
+        </div>
+
+        <section id="overview">
+          <h2>What CVX is</h2>
+          <p>CVX is an independent implementation of the Git repository model. It reads and writes the same object database, index and reference files, so your history stays portable. The binary does not shell out to <code>git</code>; Git is used by the test suite as a compatibility oracle.</p>
+          <p>The engine is split into small crates: object parsing, pack codecs, index formats, refs, revision walking, diffing, merging, transports, repository operations and the CLI. The <code>cvx</code> binary composes those crates into a single workflow.</p>
+          <div class="principles">
+            <div class="principle">
+              <span class="principle-mark" aria-hidden="true"></span>
+              <div><h3>Portable by default</h3><p>No proprietary object format and no hidden conversion step. A CVX repository is a Git repository.</p></div>
+            </div>
+            <div class="principle">
+              <span class="principle-mark" aria-hidden="true"></span>
+              <div><h3>Explicit failure</h3><p>Unsupported formats, corrupt data and unsafe paths fail with a named error instead of being silently ignored.</p></div>
+            </div>
+            <div class="principle">
+              <span class="principle-mark" aria-hidden="true"></span>
+              <div><h3>Small surface, sharp edges</h3><p>Every command is implemented, tested against Git where practical, and documented with its limits.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="quickstart">
+          <h2>Quick start</h2>
+          <p>Install from source with a current stable Rust toolchain, then create a repository. The default control directory is <code>.cvx/</code>; use <code>--storage git</code> when another tool expects a literal <code>.git/</code> directory.</p>
+          <div class="steps">
+            <div class="step">
+              <span class="step-number">1</span>
+              <div>
+                <h3>Build the binary</h3>
+                <div class="code-block"><div class="code-head"><span>shell</span><button class="copy-button" type="button" data-copy-target="code-build">Copy</button></div><pre><code id="code-build">cargo build --release -p cvx-cli
+./target/release/cvx version</code></pre></div>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-number">2</span>
+              <div>
+                <h3>Create and commit</h3>
+                <div class="code-block"><div class="code-head"><span>shell</span><button class="copy-button" type="button" data-copy-target="code-commit">Copy</button></div><pre><code id="code-commit">mkdir demo &amp;&amp; cd demo
+cvx init
+printf <span class="str">"hello\n"</span> &gt; hello.txt
+cvx add .
+cvx commit -m <span class="str">"initial commit"</span>
+cvx log --oneline</code></pre></div>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-number">3</span>
+              <div>
+                <h3>Clone over a real transport</h3>
+                <div class="tabs" data-tabs>
+                  <div class="tab-list" role="tablist" aria-label="Clone transport">
+                    <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="tab-https" id="tab-https-button">HTTPS</button>
+                    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="tab-ssh" id="tab-ssh-button" tabindex="-1">SSH</button>
+                  </div>
+                  <div class="tab-panel is-active" role="tabpanel" id="tab-https" aria-labelledby="tab-https-button">
+                    <pre><code>cvx clone https://github.com/marcosgabrielgomes110-collab/cvx.git cvx-copy</code></pre>
+                  </div>
+                  <div class="tab-panel" role="tabpanel" id="tab-ssh" aria-labelledby="tab-ssh-button" hidden>
+                    <pre><code>CVX_SSH_KEY=~/.ssh/id_ed25519 cvx clone git@github.com:marcosgabrielgomes110-collab/cvx.git cvx-copy</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            <strong>Identity.</strong> Commit identities are read from <code>user.name</code> and <code>user.email</code>, or from <code>CVX_AUTHOR_NAME</code>, <code>CVX_AUTHOR_EMAIL</code>, <code>CVX_COMMITTER_NAME</code> and <code>CVX_COMMITTER_EMAIL</code>.
+          </div>
+        </section>
+
+        <section id="commands">
+          <h2>Command reference</h2>
+          <p>These are the commands implemented by the current release. For flags and edge cases, run <code>cvx &lt;command&gt; --help</code>.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Command</th><th scope="col">Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>cvx init [DIR]</code></td><td>Create a CVX or Git repository. Supports <code>--bare</code>, <code>--storage</code> and <code>--object-format sha1|sha256</code>.</td></tr>
+                <tr><td><code>cvx clone &lt;URL&gt; [DIR]</code></td><td>Clone local, HTTPS or SSH repositories. Supports <code>--depth</code>, <code>--filter=blob:none</code> and <code>--bare</code>.</td></tr>
+                <tr><td><code>cvx add &lt;PATH&gt;...</code></td><td>Stage files, including ignore rules, modes and line-ending normalization.</td></tr>
+                <tr><td><code>cvx commit -m &lt;MSG&gt;</code></td><td>Write a commit, update the current ref and append reflogs.</td></tr>
+                <tr><td><code>cvx status</code></td><td>Compare HEAD, index and worktree. Supports <code>--porcelain</code> and <code>--short</code>.</td></tr>
+                <tr><td><code>cvx log [REV]</code></td><td>Walk history, decorate refs and peel annotated tags. Revision suffixes such as <code>HEAD~2</code> are supported.</td></tr>
+                <tr><td><code>cvx diff [REV...]</code></td><td>Compare commits, index and worktree, with stat, rename detection and pathspecs.</td></tr>
+                <tr><td><code>cvx branch / switch</code></td><td>Create, list, delete, switch or detach HEAD with worktree safety checks.</td></tr>
+                <tr><td><code>cvx merge &lt;REV&gt;</code></td><td>Fast-forward or three-way merge with conflict markers and index stages.</td></tr>
+                <tr><td><code>cvx reset [REV] -- &lt;PATH&gt;...</code></td><td>Move HEAD or reset selected index entries. Supports <code>--soft</code>, <code>--mixed</code> and <code>--hard</code>.</td></tr>
+                <tr><td><code>cvx cherry-pick / revert</code></td><td>Apply or invert clean single-parent commits. Conflicts abort without partial writes.</td></tr>
+                <tr><td><code>cvx stash</code></td><td>Save tracked index/worktree changes with <code>push</code>, <code>list</code>, <code>apply</code>, <code>pop</code> and <code>drop</code>.</td></tr>
+                <tr><td><code>cvx fetch / push</code></td><td>Update remote-tracking refs or publish with thin packs, <code>--force</code> and <code>--force-with-lease</code>.</td></tr>
+                <tr><td><code>cvx fsck / gc</code></td><td>Verify refs, objects, trees, tags, index and dangling objects; pack or prune loose objects.</td></tr>
+                <tr><td><code>cvx tag</code></td><td>Create lightweight or annotated tags, list and force-update them.</td></tr>
+                <tr><td><code>cvx github</code></td><td>Account, repositories, issues, pull requests, reviews, checks, labels, milestones, releases, assets, workflows and GraphQL.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <details class="command-details">
+            <summary>Operational examples</summary>
+            <div class="details-body">
+              <div class="code-block"><div class="code-head"><span>shell</span><button class="copy-button" type="button" data-copy-target="code-ops">Copy</button></div><pre><code id="code-ops"># Verify and compact a repository
+cvx fsck --strict
+cvx gc --prune
+
+# Repair a missing or corrupt index
+cvx fsck --repair
+
+# Inspect the last change on a branch
+cvx log --oneline -n 5
+cvx diff HEAD~1..HEAD --stat</code></pre></div>
+            </div>
+          </details>
+        </section>
+
+        <section id="architecture">
+          <h2>Architecture</h2>
+          <p>The CLI is a thin layer over repository operations. Each arrow below is a real crate boundary; the object database, index and refs are standard Git files.</p>
+          <div class="architecture-figure" role="img" aria-label="CVX architecture diagram: CLI to repository operations, then object database, index, refs and transports.">
+            <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg">
+              <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker></defs>
+              <g fill="none" stroke="currentColor" stroke-width="1.25">
+                <rect x="28" y="28" width="160" height="60" rx="8"/>
+                <rect x="300" y="28" width="160" height="60" rx="8"/>
+                <rect x="572" y="28" width="160" height="60" rx="8"/>
+                <rect x="28" y="150" width="160" height="60" rx="8"/>
+                <rect x="300" y="150" width="160" height="60" rx="8"/>
+                <rect x="572" y="150" width="160" height="60" rx="8"/>
+                <rect x="150" y="272" width="160" height="60" rx="8"/>
+                <rect x="450" y="272" width="160" height="60" rx="8"/>
+                <path d="M188 58h112M460 58h112M108 88v62M380 88v62M652 88v62M188 180h112M460 180h112M230 210l48 62M530 210l-48 62" marker-end="url(#arrow)"/>
+              </g>
+              <g fill="currentColor" font-family="ui-monospace, monospace" font-size="13" text-anchor="middle">
+                <text x="108" y="52">cvx-cli</text><text x="108" y="70" opacity=".62">commands</text>
+                <text x="380" y="52">cvx-repository</text><text x="380" y="70" opacity=".62">workflows</text>
+                <text x="652" y="52">cvx-transport</text><text x="652" y="70" opacity=".62">HTTP · SSH</text>
+                <text x="108" y="174">cvx-odb</text><text x="108" y="192" opacity=".62">loose + packs</text>
+                <text x="380" y="174">cvx-index / cvx-ref</text><text x="380" y="192" opacity=".62">staging · refs</text>
+                <text x="652" y="174">cvx-object</text><text x="652" y="192" opacity=".62">commit · tree · tag</text>
+                <text x="230" y="296">cvx-pack</text><text x="230" y="314" opacity=".62">delta · idx</text>
+                <text x="530" y="296">cvx-merge / diff</text><text x="530" y="314" opacity=".62">three-way</text>
+              </g>
+            </svg>
+          </div>
+          <p class="figure-caption">The transport layer never invokes the Git binary. Local paths are opened as repositories; HTTPS and SSH speak protocol v2 and receive-pack.</p>
+        </section>
+
+        <section id="objects">
+          <h2>Objects, refs and the worktree</h2>
+          <div class="two-col">
+            <div>
+              <h3>Objects</h3>
+              <p>Blobs, trees, commits and annotated tags are stored as standard Git objects. Every object is hashed with the repository's declared format and verified when read. Loose objects are zlib-compressed; packs support version-2 indexes, offset deltas and ref-deltas.</p>
+            </div>
+            <div>
+              <h3>Index and worktree</h3>
+              <p>The index is a standard Git index. Checkout and restore validate paths against the repository root, reject control-directory components and refuse to follow symlinked ancestors. Index writes use <code>index.lock</code> and atomic rename.</p>
+            </div>
+            <div>
+              <h3>References</h3>
+              <p>Loose refs, packed refs, symbolic <code>HEAD</code>, reflogs, tags and <code>refs/remotes</code> are supported. Ref updates use compare-and-swap locks; <code>fetch</code> updates remote-tracking refs and <code>FETCH_HEAD</code>.</p>
+            </div>
+            <div>
+              <h3>Revision resolution</h3>
+              <p>Branches, tags, remote refs, abbreviated object IDs, <code>HEAD~N</code>, <code>HEAD^N</code> and detached HEAD are supported. Ambiguous or missing revisions fail explicitly.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="network">
+          <h2>Network and authentication</h2>
+          <p>Network operations use protocol v2 for fetch and receive-pack for push. Pack data is spooled to a temporary file during fetch and streamed from disk during push; thin packs are used when the server advertises support.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Area</th><th scope="col">Behavior</th></tr></thead>
+              <tbody>
+                <tr><td>HTTPS</td><td>Basic auth through the credential store or environment. Redirects are disabled for authenticated requests. Credentials are refused over plaintext HTTP.</td></tr>
+                <tr><td>SSH</td><td>System OpenSSH with keys or <code>ssh-agent</code>. Set <code>CVX_SSH_KEY</code> for an identity and <code>CVX_SSH_STRICT_HOST_KEY_CHECKING=yes</code> for strict known_hosts.</td></tr>
+                <tr><td>Tokens</td><td><code>GITHUB_TOKEN</code>/<code>CVX_TOKEN</code> are scoped to <code>github.com</code> and <code>*.github.com</code> by default. Set <code>CVX_TOKEN_HOST</code> for another host.</td></tr>
+                <tr><td>Shallow clone</td><td><code>--depth</code> is supported for network clones. Shallow fetch updates and <code>--unshallow</code> are not implemented yet.</td></tr>
+                <tr><td>Partial clone</td><td><code>--filter=blob:none</code> is supported; missing blobs are fetched lazily. Other filters are not validated yet.</td></tr>
+                <tr><td>Timeout/retry</td><td><code>CVX_HTTP_TIMEOUT_SECS</code> and <code>CVX_HTTP_RETRIES</code> control idempotent HTTP requests.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note"><strong>Credential safety.</strong> Tokens are read from the environment or stored in the OS keychain, with a user-only file fallback. They are never accepted in repository URLs or sent over plaintext HTTP.</div>
+        </section>
+
+        <section id="github">
+          <h2>GitHub workflows</h2>
+          <p>The <code>cvx github</code> command family provides a REST and GraphQL surface for the common collaboration loop. Authentication uses a token or OAuth device flow; the token is stored in the keychain or a <code>0600</code> fallback file.</p>
+          <div class="wide-list">
+            <div><span>Account</span><p><code>login</code>, <code>logout</code>, <code>status</code>, <code>scopes</code>, OAuth device flow.</p></div>
+            <div><span>Repositories</span><p><code>repo create</code>, <code>repo delete</code>, <code>repo show</code>, collaborators.</p></div>
+            <div><span>Issues</span><p><code>issue create</code>, <code>issue list</code>, <code>issue close</code>, assignees, milestones.</p></div>
+            <div><span>Pull requests</span><p><code>pr create</code>, <code>pr list</code>, <code>pr merge</code>, reviews, review threads.</p></div>
+            <div><span>Checks</span><p><code>checks</code>, required status checks, workflow-run visibility.</p></div>
+            <div><span>Releases</span><p>Create releases, upload and delete assets, list labels and milestones.</p></div>
+          </div>
+          <p class="aside-link"><a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/github.md" rel="noreferrer">Read the GitHub integration reference <span aria-hidden="true">↗</span></a></p>
+        </section>
+
+        <section id="compatibility">
+          <h2>Compatibility</h2>
+          <p>CVX prioritizes the standard Git storage model. Features that are not implemented are rejected explicitly rather than guessed.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Feature</th><th scope="col">Status</th><th scope="col">Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Git object database</td><td><span class="tag tag-ok">Read / write</span></td><td>SHA-1 and SHA-256 loose objects and packs</td></tr>
+                <tr><td>Pack v2 / index v2</td><td><span class="tag tag-ok">Read / write</span></td><td>Offset deltas, ref-deltas for thin packs</td></tr>
+                <tr><td>Index v2 / v3</td><td><span class="tag tag-ok">Read / write</span></td><td>v4 read path; v3 when extended flags are present</td></tr>
+                <tr><td>Refs and packed-refs</td><td><span class="tag tag-ok">Read / write</span></td><td>Loose refs take precedence</td></tr>
+                <tr><td>Bare repositories</td><td><span class="tag tag-ok">Yes</span></td><td>Init, clone, fetch, push, log, tag, fsck and gc</td></tr>
+                <tr><td>SHA-256 network</td><td><span class="tag tag-partial">Partial</span></td><td>HTTPS end-to-end tested; SSH fixture pending</td></tr>
+                <tr><td>Thin packs</td><td><span class="tag tag-ok">Yes</span></td><td>Generated on push; bases resolved from local ODB on fetch</td></tr>
+                <tr><td>Submodules / LFS</td><td><span class="tag tag-no">No</span></td><td>Explicitly rejected or unsupported</td></tr>
+                <tr><td>Reftable / MIDX</td><td><span class="tag tag-no">No</span></td><td>Individual index files; files refs only</td></tr>
+                <tr><td>Hooks</td><td><span class="tag tag-partial">Partial</span></td><td>pre-commit, commit-msg, post-commit, pre-push</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="aside-link"><a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/compatibility.md" rel="noreferrer">Open the full compatibility matrix <span aria-hidden="true">↗</span></a></p>
+        </section>
+
+        <section id="security">
+          <h2>Security and operations</h2>
+          <div class="security-grid">
+            <div>
+              <h3>Repository integrity</h3>
+              <p><code>cvx fsck</code> verifies refs, commits, trees, tags, index entries and dangling objects. <code>--strict</code> also fails on dangling objects. <code>--repair</code> can rebuild a missing or unreadable index from HEAD and, with an explicit age threshold, remove stale locks.</p>
+            </div>
+            <div>
+              <h3>Worktree safety</h3>
+              <p>Checkout refuses to follow symlinked ancestors, never deletes directories recursively, and refuses to overwrite untracked files without <code>--force</code>. Case-insensitive control paths and Windows-reserved names are rejected.</p>
+            </div>
+            <div>
+              <h3>Release integrity</h3>
+              <p>Releases publish checksums and an SBOM. The workflow runs formatting, Clippy and the test suite before builds, verifies the tag against the workspace version, and includes MIT/Apache license texts in archives.</p>
+            </div>
+            <div>
+              <h3>Known gaps</h3>
+              <p>Mandatory signing, build provenance, independent audit, reproducible comparison and full network chaos coverage are still open. The threat model and release checklist document the current boundary.</p>
+            </div>
+          </div>
+          <div class="code-block"><div class="code-head"><span>shell</span><button class="copy-button" type="button" data-copy-target="code-security">Copy</button></div><pre><code id="code-security">cvx fsck --strict
+cvx fsck --repair
+CVX_STALE_LOCK_AGE_SECS=3600 cvx fsck --repair
+cvx gc --prune</code></pre></div>
+        </section>
+
+        <section id="roadmap">
+          <h2>Roadmap</h2>
+          <p>CVX ships in explicit compatibility slices. The current release is <strong>v0.9.4</strong>; the roadmap is ordered through 1.0.</p>
+          <ol class="timeline">
+            <li class="timeline-done">
+              <div class="timeline-marker"></div>
+              <div><span class="timeline-version">v0.9.4</span><h3>Security and safety fixes</h3><p>Path hardening, bounded parsers, host-scoped tokens, gc locking, commit CAS, dirty-remote protection, atomic config and release gates.</p></div>
+            </li>
+            <li class="timeline-current">
+              <div class="timeline-marker"></div>
+              <div><span class="timeline-version">v0.10.0 · in progress</span><h3>Phase 10 — security, concurrency, durability</h3><p>Remaining: mandatory signing/provenance, dependency policy, reproducible comparison, SSH SHA-256 fixture, transactional multi-ref push, shallow/unshallow and network chaos tests.</p></div>
+            </li>
+            <li>
+              <div class="timeline-marker"></div>
+              <div><span class="timeline-version">v0.11.0</span><h3>Git completeness and ecosystem</h3><p>Submodules, LFS, commit signing, reftable, MIDX, alternates, worktrees, packaging, installers and migration docs.</p></div>
+            </li>
+            <li>
+              <div class="timeline-marker"></div>
+              <div><span class="timeline-version">v1.0.0-rc.1</span><h3>Release candidate</h3><p>Feature freeze, real-repository soak, signed/reproducible artifacts, rollback and public bug window.</p></div>
+            </li>
+            <li>
+              <div class="timeline-marker"></div>
+              <div><span class="timeline-version">v1.0.0</span><h3>Production release</h3><p>No open P0 issues, validated security and release gates, supported platforms and a frozen support policy.</p></div>
+            </li>
+          </ol>
+          <p class="aside-link"><a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/roadmap.md" rel="noreferrer">Read the complete roadmap <span aria-hidden="true">↗</span></a></p>
+        </section>
+
+        <footer class="page-footer">
+          <div>
+            <p class="footer-mark">CVX</p>
+            <p>Own your history. Connect your code.</p>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/marcosgabrielgomes110-collab/cvx" rel="noreferrer">Repository</a>
+            <a href="https://github.com/marcosgabrielgomes110-collab/cvx/releases" rel="noreferrer">Releases</a>
+            <a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/LICENSE-MIT" rel="noreferrer">License</a>
+            <a href="https://github.com/marcosgabrielgomes110-collab/cvx/blob/main/docs/roadmap.md" rel="noreferrer">Roadmap</a>
+          </div>
+          <p class="footer-small">CVX is dual-licensed under MIT or Apache-2.0. Documentation reflects v0.9.4 and is not a production-readiness claim.</p>
+        </footer>
+      </article>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <p class="nav-label">On this page</p>
+      <nav>
+        <a href="#overview">What CVX is</a>
+        <a href="#quickstart">Quick start</a>
+        <a href="#commands">Command reference</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#objects">Objects and refs</a>
+        <a href="#network">Network and auth</a>
+        <a href="#github">GitHub</a>
+        <a href="#compatibility">Compatibility</a>
+        <a href="#security">Security</a>
+        <a href="#roadmap">Roadmap</a>
+      </nav>
+    </aside>
+  </div>
+
+  <div class="search-overlay" id="search-overlay" hidden>
+    <div class="search-dialog" role="dialog" aria-modal="true" aria-labelledby="search-title">
+      <div class="search-head">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13.2 13.2 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <label class="sr-only" for="search-input" id="search-title">Search documentation</label>
+        <input id="search-input" type="search" placeholder="Search pages, commands and concepts…" autocomplete="off" spellcheck="false">
+        <kbd>ESC</kbd>
+      </div>
+      <div class="search-results" id="search-results" role="listbox" aria-label="Search results"></div>
+      <div class="search-empty" id="search-empty" hidden>No matching sections. Try a command such as <code>gc</code>, <code>stash</code>, <code>SSH</code>, or <code>roadmap</code>.</div>
+    </div>
+  </div>
+
+  <span class="sr-only" id="live-region" aria-live="polite"></span>
+  <script src="app.js"></script>
+</body>
+</html>
