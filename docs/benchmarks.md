@@ -48,7 +48,12 @@ silently exhausting memory:
 
 ```console
 $ CVX_BENCH_LARGE=1 CVX_BENCH_MEMORY_KB=4194304 scripts/bench-large.sh
+$ CVX_BENCH_1M=1 CVX_BENCH_MEMORY_KB=4194304 scripts/bench-large.sh
+$ CVX_BENCH_FILES=250000 CVX_BENCH_MEMORY_KB=4194304 scripts/bench-large.sh
 ```
+
+The 1M-file run is deliberately opt-in and is intended for a dedicated runner;
+it is not part of the standard CI matrix.
 
 Pack reads are file-backed: `Pack` keeps only the index and a small object
 cache in memory, and decompresses objects on demand from the `.pack` file.

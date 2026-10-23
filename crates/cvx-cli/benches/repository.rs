@@ -57,6 +57,16 @@ fn bench_repository(c: &mut Criterion) {
     if std::env::var_os("CVX_BENCH_LARGE").is_some() {
         sizes.push(100_000);
     }
+    if std::env::var_os("CVX_BENCH_1M").is_some() {
+        sizes.push(1_000_000);
+    }
+    if let Some(value) = std::env::var_os("CVX_BENCH_FILES")
+        && let Some(files) = value.to_str().and_then(|value| value.parse::<usize>().ok())
+        && files > 0
+        && !sizes.contains(&files)
+    {
+        sizes.push(files);
+    }
 
     let mut group = c.benchmark_group("repository");
     group.sample_size(10);
