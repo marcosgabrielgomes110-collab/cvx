@@ -305,7 +305,11 @@ use the file backend).
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs and SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Production readiness: workflow safety and durability | In progress — v0.8.1 |
+| 9 | Streaming index/network, thin packs and large-repository memory limits | Next — v0.9.0 |
+| 10 | Security, concurrency and durability | Planned — v0.10.0 |
+| 11 | Git completeness, GitHub surface and packaging | Planned — v0.11.0 |
+| 12 | Release candidate and real-repository soak tests | Planned — v1.0.0-rc.1 |
+| 13 | Production release | Planned — v1.0.0 |
 
 ## Contributing
 

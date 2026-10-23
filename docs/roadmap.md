@@ -15,7 +15,11 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Production readiness: streaming, concurrency, security, Git completeness, packaging | In progress — v0.8.1 |
+| 9 | Streaming index/network, thin-pack generation and large-repo memory limits | Next — v0.9.0 |
+| 10 | Security, concurrency and durability | Planned — v0.10.0 |
+| 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
+| 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
+| 13 | Production release | Planned — v1.0.0 |
 
 ## Phase 2B — merge and history workflows
 
@@ -161,47 +165,30 @@ Remaining:
 - lock timeout/stale-lock recovery and multi-process soak tests;
 - hooks, commit signing, submodules and LFS.
 
-## Phase 9 — production readiness (in progress)
+## Phase 9 — streaming, network and memory (v0.9.0)
 
-The 0.7.x series is a beta with strong local and GitHub workflows, but it is
-not yet production-grade for teams, CI fleets or large repositories. The
-following work is required before a 1.0 production declaration.
+This phase is about making the engine safe for large repositories and real
+network traffic. It is the next release, not a feature-only milestone.
 
-Implemented in v0.8.1:
+Delivered groundwork in v0.8.1:
 
 - commit lifecycle hooks (`pre-commit`, `commit-msg`, `post-commit`) and
   `pre-push`, with `core.hooksPath`;
-- `CVX_LOCK_TIMEOUT_MS` for index/ref lock contention and clearer stale-lock
-  diagnostics;
+- `CVX_LOCK_TIMEOUT_MS` and clearer stale-lock diagnostics;
 - `cvx reset <REV> -- <PATH>...` for pathspec index resets;
-- integration coverage for hook rejection, message rewriting, pre-push
-  rejection and lock timeout diagnostics.
+- integration coverage for hooks, lock timeout and reset pathspecs.
 
-### P0 — data safety and concurrency
-
-- stale-lock automatic recovery (timeout and diagnostics are implemented);
-- multi-process soak tests for index, refs, packs and `gc`;
-- transactional multi-reference push (all refs or none);
-- crash-consistency tests for pack deletion, loose-object pruning and
-  reflog-only history;
-- `cvx fsck --repair` for safe index/control-state recovery, never silent
-  object deletion;
-- explicit reflog retention policy in `gc` and a way to opt out of pruning;
-- durability review on Windows and network filesystems (fsync, replace and
-  directory synchronization semantics).
-
-### P0 — streaming and scale
+### Streaming and scale
 
 - streaming index parsing and writing with bounded memory;
 - streaming or spooled HTTP/SSH response bodies and pack ingestion;
 - bounded-memory pack writing and object enumeration;
-- incremental repack, pack reuse and delta/search heuristics comparable to
-  Git on large repositories;
+- incremental repack, pack reuse and delta/search heuristics comparable to Git;
 - benchmark and regression gates for 1M+ objects, long history and large
   binary files;
 - documented memory budgets and failure behavior under pressure.
 
-### P0 — network and wire protocol
+### Network and wire protocol
 
 - thin-pack generation for push, not only ingestion;
 - end-to-end SHA-256 tests against real HTTPS and SSH Git servers;
@@ -215,7 +202,30 @@ Implemented in v0.8.1:
 - network chaos tests: truncation, redirects, expired tokens, rate limits and
   interrupted pack streams.
 
-### P0 — security and supply chain
+### Exit criteria for 0.9.0
+
+- a 1M-object repository can be cloned, fetched, packed and read within a
+  documented memory ceiling;
+- thin-pack generation is covered by push tests against a real Git server;
+- SHA-256 clone/fetch/push pass against local HTTP and SSH servers;
+- large-repository benchmarks run in CI with an explicit memory budget.
+
+## Phase 10 — security, concurrency and durability (v0.10.0)
+
+### Data safety and concurrency
+
+- stale-lock automatic recovery and actionable diagnostics for every lock;
+- multi-process soak tests for index, refs, packs and `gc`;
+- transactional multi-reference push (all refs or none);
+- crash-consistency tests for pack deletion, loose-object pruning and
+  reflog-only history;
+- `cvx fsck --repair` for safe index/control-state recovery, never silent
+  object deletion;
+- explicit reflog retention policy in `gc` and an option to opt out of pruning;
+- durability review on Windows and network filesystems (fsync, replace and
+  directory synchronization semantics).
+
+### Security and supply chain
 
 - formal threat model and independent security audit of parsers, transports,
   credential handling and worktree writes;
@@ -227,20 +237,31 @@ Implemented in v0.8.1:
 - secret redaction audit, token scope minimization and malicious-repository
   resource limits.
 
-### P1 — Git compatibility completeness
+### Exit criteria for 0.10.0
 
-- hooks beyond commit lifecycle and pre-push (`prepare-commit-msg`, `pre-merge-commit`, `post-checkout`, `post-merge`);
+- no known data-loss path under crash, concurrent access or interrupted
+  network transfer;
+- security checks and dependency policy run in CI;
+- releases are signed, carry an SBOM and reproduce from a clean checkout;
+- multi-process soak tests pass on all supported platforms.
+
+## Phase 11 — Git completeness and ecosystem (v0.11.0)
+
+### Git compatibility
+
+- hooks beyond commit lifecycle and pre-push (`prepare-commit-msg`,
+  `pre-merge-commit`, `post-checkout`, `post-merge`);
 - commit and tag signing, and verification;
 - submodules, Git LFS, reftable, multi-pack index and alternates;
 - linked worktrees and pack v3/index v4 writing;
 - working-tree encodings and diff/merge attribute drivers;
 - merge rename detection and directory/file conflict resolution;
-- remaining reset edge cases with pathspecs (implemented for index resets);
+- remaining reset edge cases with pathspecs;
 - `cherry-pick`/`revert` conflict state with `--continue`/`--abort` and author
   preservation;
 - stash support for untracked files and index restoration.
 
-### P1 — GitHub and product surface
+### GitHub and product surface
 
 - automatic pagination for lists, review threads and comments;
 - GitHub App/installation tokens and OAuth browser callback;
@@ -249,7 +270,7 @@ Implemented in v0.8.1:
 - streaming release-asset uploads instead of loading assets into memory;
 - project/board and branch-protection operations where the API permits.
 
-### P2 — operations and release engineering
+### Operations and packaging
 
 - installers and packages for Linux, macOS and Windows;
 - man pages, shell completions and a complete command/config reference;
@@ -258,6 +279,38 @@ Implemented in v0.8.1:
 - documented performance envelope and supported repository sizes;
 - CI gates for MSRV, feature combinations, Windows paths and long-running
   soak tests.
+
+### Exit criteria for 0.11.0
+
+- the documented Git subset is implemented or explicitly unsupported without
+  silent data loss;
+- installers exist for the three platforms;
+- migration and disaster-recovery documentation is tested;
+- GitHub list operations paginate correctly.
+
+## Phase 12 — release candidate (v1.0.0-rc.1)
+
+- feature freeze except critical fixes;
+- run the full differential suite against Git on Linux, macOS and Windows;
+- migrate real repositories and run soak tests for at least two weeks;
+- publish release-candidate binaries and collect a public bug report window;
+- verify signed, reproducible artifacts and the SBOM from a clean environment;
+- exercise upgrade, backup and restore procedures;
+- close all P0 data-loss and P0 security findings.
+
+### Exit criteria for rc.1
+
+- no open P0 correctness, data-loss or security issue;
+- no known regression against the supported Git subset;
+- release checklist and rollback procedure exercised end-to-end.
+
+## Phase 13 — production release (v1.0.0)
+
+- publish the stable release from the validated rc.1 tree;
+- publish signed binaries, checksums, SBOM and provenance;
+- freeze the support policy and security-response process;
+- announce the supported repository sizes, platforms and Git compatibility;
+- preserve a rollback path and post-release monitoring window.
 
 ### Exit criteria for 1.0
 
