@@ -264,3 +264,36 @@ fn remote_add_configures_a_local_remote() {
     assert!(remotes.contains("upstream"));
     assert!(remotes.contains("other"));
 }
+
+#[test]
+fn push_refuses_to_overwrite_a_dirty_non_bare_remote() {
+    let env = TestEnv::new();
+    env.cvx().args(["init"]).assert().success();
+    env.write("file.txt", "first\n");
+    env.cvx().args(["add", "."]).assert().success();
+    commit(&env, "first");
+
+    let destination = env.path("..").join("dirty-remote");
+    env.cvx()
+        .args(["clone", ".", destination.to_str().expect("utf8 path")])
+        .assert()
+        .success();
+    std::fs::write(destination.join("file.txt"), "uncommitted\n").expect("dirty");
+    env.cvx()
+        .args(["remote", "add", "origin", destination.to_str().unwrap()])
+        .assert()
+        .success();
+
+    env.write("file.txt", "pushed\n");
+    env.cvx().args(["add", "."]).assert().success();
+    commit(&env, "pushed");
+    env.cvx()
+        .args(["push", "origin", "main"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("local changes"));
+    assert_eq!(
+        std::fs::read_to_string(destination.join("file.txt")).expect("file"),
+        "uncommitted\n"
+    );
+}

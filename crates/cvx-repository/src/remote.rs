@@ -10,6 +10,7 @@ use cvx_transport::{NetworkTransport, PushCommand, looks_like_scp};
 
 use crate::init::{InitOptions, InitStorage};
 use crate::repository::{CVX_DIR, GIT_DIR, Repository};
+use crate::status::StatusOptions;
 
 const DEFAULT_REMOTE: &str = "origin";
 
@@ -606,6 +607,19 @@ impl Repository {
         }
         let old = remote.refs().read_ref(&reference)?;
         self.check_lease(options, remote_name, &branch, old)?;
+        let updates_worktree =
+            !remote.is_bare() && remote.head()?.target() == Some(reference.as_str());
+        if updates_worktree {
+            let status = remote.status(StatusOptions {
+                untracked: true,
+                collapse_untracked: false,
+            })?;
+            if !status.is_clean() {
+                return Err(Error::Message(format!(
+                    "remote '{branch}' has local changes; refusing to overwrite its worktree"
+                )));
+            }
+        }
         self.run_pre_push(remote_name, &url, &reference, tip, old)?;
 
         let objects = self.reachable_objects(&[tip])?;
@@ -630,7 +644,8 @@ impl Repository {
 
         remote.refs().update_ref(&reference, tip, old)?;
 
-        if remote.head()?.target() == Some(reference.as_str()) {
+        if updates_worktree {
+            let lock = IndexLock::acquire(remote.control_dir())?;
             let snapshot = remote.tree_snapshot_for_commit(tip)?;
             let filemode = remote.filemode()?;
             let index = remote.read_index()?;
@@ -640,9 +655,8 @@ impl Repository {
                 .filter(|entry| entry.stage == 0)
                 .map(|entry| (entry.path.clone(), (entry.mode, entry.oid)))
                 .collect();
-            remote.checkout_target(&snapshot, &existing, filemode, true)?;
+            remote.checkout_target(&snapshot, &existing, filemode, false)?;
             let new_index = remote.index_from_tree(&snapshot, filemode)?;
-            let lock = IndexLock::acquire(remote.control_dir())?;
             lock.commit(&new_index)?;
         }
 

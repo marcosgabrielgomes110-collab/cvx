@@ -43,7 +43,10 @@ fn sha256_clone_and_push_over_ssh_transport() {
     let temp = env.path("..");
     let remote = temp.join("ssh-remote.git");
     let work = temp.join("ssh-source");
-    run_git(&temp, &["init", "--bare", "--object-format=sha256", "ssh-remote.git"]);
+    run_git(
+        &temp,
+        &["init", "--bare", "--object-format=sha256", "ssh-remote.git"],
+    );
     run_git(&temp, &["init", "--object-format=sha256", "ssh-source"]);
     run_git(&work, &["config", "user.name", "Test User"]);
     run_git(&work, &["config", "user.email", "test@example.com"]);
@@ -61,14 +64,22 @@ fn sha256_clone_and_push_over_ssh_transport() {
         .args(["clone", &url, clone.to_str().unwrap()])
         .assert()
         .success();
-    let log = env.cvx_in(&clone).args(["log", "--oneline"]).output().unwrap();
+    let log = env
+        .cvx_in(&clone)
+        .args(["log", "--oneline"])
+        .output()
+        .unwrap();
     assert!(stdout(&log).contains("sha256 ssh base"));
     let fsck = Command::new("git")
         .args(["--git-dir=.cvx", "--work-tree=.", "fsck", "--strict"])
         .current_dir(&clone)
         .output()
         .unwrap();
-    assert!(fsck.status.success(), "{}", String::from_utf8_lossy(&fsck.stderr));
+    assert!(
+        fsck.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fsck.stderr)
+    );
 
     let repo = temp.join("ssh-pusher");
     env.cvx_in(&temp)
