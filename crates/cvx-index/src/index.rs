@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use cvx_core::{Error, Result};
@@ -132,12 +134,7 @@ impl Index {
 
     /// Reads an index using a specific object format.
     pub fn read_from_with_algorithm(path: &Path, algorithm: HashAlgorithm) -> Result<Option<Self>> {
-        let bytes = match std::fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(Error::io(path.display().to_string(), error)),
-        };
-        Self::parse_with_algorithm(&bytes, algorithm).map(Some)
+        Self::read_stream(path, algorithm)
     }
 
     /// Writes the index atomically.
@@ -466,6 +463,336 @@ impl<'a> Reader<'a> {
         }
 
         Ok(value)
+    }
+}
+
+struct HashingReader<R> {
+    inner: R,
+    hasher: IndexHasher,
+    hashing: bool,
+}
+
+impl<R: Read> HashingReader<R> {
+    fn new(algorithm: HashAlgorithm, inner: R) -> Self {
+        Self {
+            inner,
+            hasher: IndexHasher::new(algorithm),
+            hashing: true,
+        }
+    }
+
+    fn finish(self) -> Vec<u8> {
+        self.hasher.finalize()
+    }
+}
+
+impl<R: Read> Read for HashingReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buffer)?;
+        if self.hashing {
+            self.hasher.update(&buffer[..read]);
+        }
+        Ok(read)
+    }
+}
+
+enum IndexHasher {
+    Sha1(Sha1),
+    Sha256(Sha256),
+}
+
+impl IndexHasher {
+    fn new(algorithm: HashAlgorithm) -> Self {
+        match algorithm {
+            HashAlgorithm::Sha1 => {
+                use sha1::Digest;
+                Self::Sha1(Sha1::new())
+            }
+            HashAlgorithm::Sha256 => {
+                use sha2::Digest;
+                Self::Sha256(Sha256::new())
+            }
+        }
+    }
+
+    fn update(&mut self, bytes: &[u8]) {
+        match self {
+            Self::Sha1(hasher) => {
+                use sha1::Digest;
+                hasher.update(bytes);
+            }
+            Self::Sha256(hasher) => {
+                use sha2::Digest;
+                hasher.update(bytes);
+            }
+        }
+    }
+
+    fn finalize(self) -> Vec<u8> {
+        match self {
+            Self::Sha1(hasher) => {
+                use sha1::Digest;
+                hasher.finalize().to_vec()
+            }
+            Self::Sha256(hasher) => {
+                use sha2::Digest;
+                hasher.finalize().to_vec()
+            }
+        }
+    }
+}
+
+struct StreamReader<R> {
+    inner: R,
+    position: usize,
+}
+
+impl<R: Read> StreamReader<R> {
+    fn new(inner: R) -> Self {
+        Self { inner, position: 0 }
+    }
+
+    fn position(&self) -> usize {
+        self.position
+    }
+
+    fn read_exact(&mut self, buffer: &mut [u8]) -> Result<()> {
+        self.inner.read_exact(buffer).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::UnexpectedEof {
+                Error::corrupt("index is truncated")
+            } else {
+                Error::io("failed to read index", error)
+            }
+        })?;
+        self.position = self.position.saturating_add(buffer.len());
+        Ok(())
+    }
+
+    fn take(&mut self, length: usize) -> Result<Vec<u8>> {
+        if length > 64 * 1024 * 1024 {
+            return Err(Error::corrupt("index field is implausibly large"));
+        }
+        let mut value = vec![0u8; length];
+        self.read_exact(&mut value)?;
+        Ok(value)
+    }
+
+    fn skip(&mut self, mut length: usize) -> Result<()> {
+        let mut buffer = [0u8; 8192];
+        while length > 0 {
+            let chunk = length.min(buffer.len());
+            self.read_exact(&mut buffer[..chunk])?;
+            length -= chunk;
+        }
+        Ok(())
+    }
+
+    fn u8(&mut self) -> Result<u8> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn u16(&mut self) -> Result<u16> {
+        let bytes: [u8; 2] = self.take(2)?.try_into().expect("length checked");
+        Ok(u16::from_be_bytes(bytes))
+    }
+
+    fn u32(&mut self) -> Result<u32> {
+        let bytes: [u8; 4] = self.take(4)?.try_into().expect("length checked");
+        Ok(u32::from_be_bytes(bytes))
+    }
+
+    fn cstring(&mut self) -> Result<Vec<u8>> {
+        let mut value = Vec::new();
+        loop {
+            let byte = self.u8()?;
+            if byte == 0 {
+                return Ok(value);
+            }
+            value.push(byte);
+            if value.len() > 1024 * 1024 {
+                return Err(Error::corrupt("index path is too long"));
+            }
+        }
+    }
+
+    fn varint(&mut self) -> Result<u64> {
+        let mut byte = self.u8()?;
+        let mut value = u64::from(byte & 0x7f);
+        while byte & 0x80 != 0 {
+            value = value
+                .checked_add(1)
+                .ok_or_else(|| Error::corrupt("index varint overflow"))?;
+            byte = self.u8()?;
+            value = value
+                .checked_shl(7)
+                .ok_or_else(|| Error::corrupt("index varint overflow"))?
+                + u64::from(byte & 0x7f);
+        }
+        Ok(value)
+    }
+}
+
+fn parse_stream<R: Read>(
+    reader: &mut StreamReader<R>,
+    algorithm: HashAlgorithm,
+    payload_len: usize,
+) -> Result<(u32, Vec<IndexEntry>)> {
+    if reader.take(4)? != MAGIC {
+        return Err(Error::corrupt("index has an invalid signature"));
+    }
+    let version = reader.u32()?;
+    if !(2..=4).contains(&version) {
+        return Err(Error::unsupported(format!("index version {version}")));
+    }
+    let count = reader.u32()? as usize;
+    if count > payload_len / 62 + 1 {
+        return Err(Error::corrupt("index entry count is implausible"));
+    }
+
+    let mut entries = Vec::with_capacity(count);
+    let mut previous_path = Vec::new();
+    for _ in 0..count {
+        let entry_start = reader.position();
+        let ctime_sec = reader.u32()?;
+        let ctime_nsec = reader.u32()?;
+        let mtime_sec = reader.u32()?;
+        let mtime_nsec = reader.u32()?;
+        let dev = reader.u32()?;
+        let ino = reader.u32()?;
+        let mode = reader.u32()?;
+        let uid = reader.u32()?;
+        let gid = reader.u32()?;
+        let size = reader.u32()?;
+        let oid_bytes = reader.take(algorithm.oid_len())?;
+        let oid = ObjectId::from_slice(&oid_bytes).map_err(|error| {
+            Error::corrupt(format!("index contains an invalid object id: {error}"))
+        })?;
+        let flags = reader.u16()?;
+        let extended = flags & 0x4000 != 0;
+        if extended && version < 3 {
+            return Err(Error::corrupt(
+                "index entry uses extended flags in version 2",
+            ));
+        }
+        let extended_flags = if extended { reader.u16()? } else { 0 };
+        let name_len = (flags & 0x0fff) as usize;
+        let path = if version == 4 {
+            let strip = reader.varint()?;
+            let strip = usize::try_from(strip)
+                .map_err(|_| Error::corrupt("index path prefix length is too large"))?;
+            if strip > previous_path.len() {
+                return Err(Error::corrupt(
+                    "index path prefix is longer than the previous path",
+                ));
+            }
+            let suffix = reader.cstring()?;
+            let mut path = previous_path[..previous_path.len() - strip].to_vec();
+            path.extend_from_slice(&suffix);
+            path
+        } else if name_len < 0x0fff {
+            let path = reader.take(name_len)?;
+            if reader.u8()? != 0 {
+                return Err(Error::corrupt("index path is not NUL-terminated"));
+            }
+            path
+        } else {
+            reader.cstring()?
+        };
+        if version != 4 {
+            let consumed = reader.position() - entry_start;
+            let padding = (8 - (consumed % 8)) % 8;
+            if padding > 0 {
+                let padding = reader.take(padding)?;
+                if padding.iter().any(|byte| *byte != 0) {
+                    return Err(Error::corrupt("index entry has non-zero padding"));
+                }
+            }
+        }
+        validate_path(&path)?;
+        entries.push(IndexEntry {
+            ctime_sec,
+            ctime_nsec,
+            mtime_sec,
+            mtime_nsec,
+            dev,
+            ino,
+            mode,
+            uid,
+            gid,
+            size,
+            oid,
+            stage: ((flags >> 12) & 0x3) as u8,
+            assume_valid: flags & 0x8000 != 0,
+            extended_flags,
+            path: path.clone(),
+        });
+        previous_path = path;
+    }
+
+    while reader.position() < payload_len {
+        if payload_len - reader.position() < 8 {
+            return Err(Error::corrupt("index has a truncated extension"));
+        }
+        let signature = reader.take(4)?;
+        let length = reader.u32()? as usize;
+        if length > payload_len - reader.position() {
+            return Err(Error::corrupt("index has a truncated extension payload"));
+        }
+        reader.skip(length)?;
+        if signature[0].is_ascii_lowercase() {
+            return Err(Error::unsupported(format!(
+                "required index extension '{}'",
+                String::from_utf8_lossy(&signature)
+            )));
+        }
+    }
+    validate_sorted(&entries)?;
+    Ok((version, entries))
+}
+
+impl Index {
+    pub(crate) fn read_stream(
+        path: &std::path::Path,
+        algorithm: HashAlgorithm,
+    ) -> Result<Option<Self>> {
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(Error::io(path.display().to_string(), error)),
+        };
+        let file_len = file
+            .metadata()
+            .map_err(|error| Error::io(path.display().to_string(), error))?
+            .len() as usize;
+        let checksum_len = algorithm.oid_len();
+        if file_len < 12 + checksum_len {
+            return Err(Error::corrupt("index file is too short"));
+        }
+        let payload_len = file_len - checksum_len;
+        let mut hashing = HashingReader::new(algorithm, file);
+        let (version, entries) = {
+            let mut limited = (&mut hashing).take(payload_len as u64);
+            let mut reader = StreamReader::new(&mut limited);
+            let parsed = parse_stream(&mut reader, algorithm, payload_len)?;
+            if reader.position() != payload_len {
+                return Err(Error::corrupt("index has trailing bytes"));
+            }
+            parsed
+        };
+        hashing.hashing = false;
+        let mut checksum = vec![0u8; checksum_len];
+        hashing
+            .read_exact(&mut checksum)
+            .map_err(|error| Error::io(path.display().to_string(), error))?;
+        let expected = hashing.finish();
+        if expected != checksum {
+            return Err(Error::corrupt("index checksum does not match"));
+        }
+        Ok(Some(Self {
+            version,
+            entries,
+            algorithm,
+        }))
     }
 }
 
