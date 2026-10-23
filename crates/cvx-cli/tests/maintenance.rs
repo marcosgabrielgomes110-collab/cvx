@@ -337,3 +337,20 @@ fn fsck_repair_rebuilds_a_corrupt_or_missing_index() {
     assert_eq!(normalize(&status), "");
     env.assert_git_cvx_ok(&["fsck", "--strict"]);
 }
+
+#[test]
+fn fsck_repair_removes_stale_locks() {
+    let env = TestEnv::new();
+    env.cvx().arg("init").assert().success();
+    env.write("a.txt", "content\n");
+    env.cvx().args(["add", "."]).assert().success();
+    std::fs::write(env.path(".cvx/index.lock"), b"").unwrap();
+
+    env.cvx()
+        .env("CVX_STALE_LOCK_AGE_SECS", "0")
+        .args(["fsck", "--repair"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed stale lock"));
+    assert!(!env.path(".cvx/index.lock").exists());
+}

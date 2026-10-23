@@ -1,4 +1,6 @@
 use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use cvx_core::Result;
 use cvx_index::{Index, IndexLock};
@@ -47,6 +49,9 @@ impl Repository {
     pub fn fsck_with_options(&self, options: FsckOptions) -> Result<FsckReport> {
         let mut state = FsckState::default();
         let mut repairs = Vec::new();
+        if options.repair {
+            self.repair_stale_locks(&mut repairs);
+        }
 
         if let Ok(head) = self.head()
             && let Some(oid) = head.oid()
@@ -133,6 +138,42 @@ impl Repository {
             errors: state.errors,
             repairs,
         })
+    }
+
+    fn repair_stale_locks(&self, repairs: &mut Vec<String>) {
+        let threshold = std::env::var("CVX_STALE_LOCK_AGE_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| Duration::from_secs(60 * 60));
+        let mut paths = Vec::new();
+        for name in [
+            "index.lock",
+            "HEAD.lock",
+            "config.lock",
+            "packed-refs.lock",
+            "shallow.lock",
+        ] {
+            let path = self.control_dir().join(name);
+            if path.is_file() {
+                paths.push(path);
+            }
+        }
+        collect_lock_files(&self.control_dir().join("refs"), &mut paths);
+        collect_lock_files(&self.control_dir().join("logs"), &mut paths);
+        for path in paths {
+            let Ok(metadata) = std::fs::metadata(&path) else {
+                continue;
+            };
+            let age = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+                .unwrap_or_default();
+            if age >= threshold && std::fs::remove_file(&path).is_ok() {
+                repairs.push(format!("removed stale lock {}", path.display()));
+            }
+        }
     }
 
     fn repair_index(&self) -> Result<Index> {
@@ -256,6 +297,24 @@ impl FsckState {
                 Err(error) => self.errors.push(format!("{oid}: {error}")),
             },
             ObjectKind::Blob => {}
+        }
+    }
+}
+
+fn collect_lock_files(directory: &Path, paths: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_lock_files(&path, paths);
+        } else if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".lock"))
+        {
+            paths.push(path);
         }
     }
 }
