@@ -14,6 +14,11 @@
   const searchEmpty = document.getElementById("search-empty");
   const searchTrigger = document.querySelector("[data-search-open]");
 
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  document.querySelectorAll("[data-shortcut]").forEach((element) => {
+    element.textContent = isMac ? "⌘ K" : "Ctrl K";
+  });
+
   const announce = (message) => {
     if (!live) return;
     live.textContent = "";
