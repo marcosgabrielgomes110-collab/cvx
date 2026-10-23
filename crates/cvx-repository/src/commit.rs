@@ -541,11 +541,8 @@ mod tests {
         add_all(&repository, temp.path());
         let second = repository.commit(options("second")).expect("second");
 
-        let result = repository.commit_with_parents(
-            vec!["stale".to_owned()],
-            vec![first.oid],
-            true,
-        );
+        let result =
+            repository.commit_with_parents(vec!["stale".to_owned()], vec![first.oid], true);
         assert!(result.is_err(), "stale parent must be rejected");
         assert_eq!(
             repository.head().expect("head").oid(),
