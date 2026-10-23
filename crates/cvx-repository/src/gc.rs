@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, IoResultExt, Result};
@@ -27,6 +28,13 @@ impl Repository {
     /// place. With `prune`, all reachable objects are repacked, loose objects
     /// are removed and old packs without a `.keep` file are deleted.
     pub fn gc(&self, prune: bool) -> Result<GcReport> {
+        let _lock = GcLock::acquire(self.control_dir())?;
+        let loose_snapshot: BTreeSet<ObjectId> = self
+            .objects()
+            .iter_oids()?
+            .into_iter()
+            .filter(|oid| self.objects().loose().path_for(*oid).is_file())
+            .collect();
         let mut roots = Vec::new();
         for (_, oid) in self.refs().list_refs("refs")? {
             roots.push(oid);
@@ -79,7 +87,7 @@ impl Repository {
 
         let mut pruned_objects = 0;
         if prune {
-            for oid in self.objects().iter_oids()? {
+            for oid in loose_snapshot {
                 let path = self.objects().loose().path_for(oid);
                 if !path.is_file() {
                     continue;
@@ -108,6 +116,37 @@ impl Repository {
             removed_packs,
             pack_path,
         })
+    }
+}
+
+struct GcLock {
+    path: PathBuf,
+    _file: Option<File>,
+}
+
+impl GcLock {
+    fn acquire(control_dir: &Path) -> Result<Self> {
+        let path = control_dir.join("gc.lock");
+        let file = cvx_core::fs::create_lock_file(&path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::Message(format!(
+                    "another CVX process is running gc ({}); remove the lock if no process is active",
+                    path.display()
+                ))
+            } else {
+                Error::io(path.display().to_string(), error)
+            }
+        })?;
+        Ok(Self {
+            path,
+            _file: Some(file),
+        })
+    }
+}
+
+impl Drop for GcLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 

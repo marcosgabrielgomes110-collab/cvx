@@ -153,6 +153,7 @@ impl Repository {
             "config.lock",
             "packed-refs.lock",
             "shallow.lock",
+            "gc.lock",
         ] {
             let path = self.control_dir().join(name);
             if path.is_file() {
