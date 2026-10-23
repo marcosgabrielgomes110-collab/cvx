@@ -129,6 +129,18 @@ remove a stale lock safely.
 reports the repair. It never deletes objects or rewrites refs. Bare
 repositories are not given a synthetic index.
 
+## Soak testing
+
+`scripts/soak.sh` creates a disposable repository, commits repeatedly, runs
+concurrent status readers, then executes `fsck` and `gc --prune`:
+
+```console
+$ CVX_SOAK_ITERATIONS=200 CVX_SOAK_JOBS=4 scripts/soak.sh
+```
+
+It is intentionally opt-in because it is a long-running test rather than a
+unit test.
+
 ## Release verification and signing
 
 Release workflows verify every checksum before publishing. When the
