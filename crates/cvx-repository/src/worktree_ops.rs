@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use cvx_core::{Error, IoResultExt, Result};
 #[cfg(unix)]
 use cvx_index::MODE_EXECUTABLE;
-use cvx_index::{MODE_FILE, MODE_SYMLINK, path_to_bytes};
+use cvx_index::{MODE_FILE, MODE_SYMLINK, path_to_bytes, validate_path};
 
 /// Content read from the worktree for a repository-relative path.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,26 +191,7 @@ pub(crate) fn remove_file(work_tree: &Path, relative: &[u8]) -> Result<()> {
 }
 
 fn validate_relative_path(path: &[u8]) -> Result<()> {
-    if path.is_empty() || path[0] == b'/' || path.contains(&0) || path.ends_with(b"/") {
-        return Err(Error::InvalidPath {
-            path: String::from_utf8_lossy(path).into_owned(),
-        });
-    }
-
-    for component in path.split(|byte| *byte == b'/') {
-        if component.is_empty()
-            || component == b"."
-            || component == b".."
-            || component == b".git"
-            || component == b".cvx"
-        {
-            return Err(Error::InvalidPath {
-                path: String::from_utf8_lossy(path).into_owned(),
-            });
-        }
-    }
-
-    Ok(())
+    validate_path(path)
 }
 
 fn prune_empty_parents(work_tree: &Path, path: &mut PathBuf) {

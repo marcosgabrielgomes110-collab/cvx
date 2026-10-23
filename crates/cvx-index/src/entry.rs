@@ -213,14 +213,68 @@ pub fn validate_path(path: &[u8]) -> Result<()> {
         if component.is_empty()
             || component == b"."
             || component == b".."
-            || component == b".git"
-            || component == b".cvx"
+            || component.eq_ignore_ascii_case(b".git")
+            || component.eq_ignore_ascii_case(b".cvx")
+            || windows_component_is_invalid(component)
         {
             return invalid();
         }
     }
 
     Ok(())
+}
+
+fn windows_component_is_invalid(component: &[u8]) -> bool {
+    #[cfg(not(windows))]
+    {
+        let _ = component;
+        false
+    }
+    #[cfg(windows)]
+    {
+        if component.iter().any(|byte| {
+            *byte < 0x20
+                || matches!(
+                    *byte,
+                    b'\\' | b':' | b'<' | b'>' | b'"' | b'|' | b'?' | b'*'
+                )
+        }) {
+            return true;
+        }
+        if component.ends_with(b".") || component.ends_with(b" ") {
+            return true;
+        }
+        let stem = component
+            .split(|byte| *byte == b'.')
+            .next()
+            .unwrap_or(component);
+        let upper = stem.to_ascii_uppercase();
+        matches!(
+            upper.as_slice(),
+            b"CON"
+                | b"PRN"
+                | b"AUX"
+                | b"NUL"
+                | b"COM1"
+                | b"COM2"
+                | b"COM3"
+                | b"COM4"
+                | b"COM5"
+                | b"COM6"
+                | b"COM7"
+                | b"COM8"
+                | b"COM9"
+                | b"LPT1"
+                | b"LPT2"
+                | b"LPT3"
+                | b"LPT4"
+                | b"LPT5"
+                | b"LPT6"
+                | b"LPT7"
+                | b"LPT8"
+                | b"LPT9"
+        )
+    }
 }
 
 #[cfg(unix)]
@@ -276,6 +330,8 @@ mod tests {
 
     #[test]
     fn validates_paths() {
+        assert!(validate_path(b"src/.CVX/hooks/pre-commit").is_err());
+        assert!(validate_path(b"src/.GiT/config").is_err());
         validate_path(b"src/main.rs").expect("valid");
         validate_path(b"a").expect("valid");
         assert!(validate_path(b"").is_err());

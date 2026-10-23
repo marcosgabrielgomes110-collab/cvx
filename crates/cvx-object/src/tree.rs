@@ -158,6 +158,13 @@ fn validate_name(name: &[u8]) -> Result<()> {
             String::from_utf8_lossy(name)
         )));
     }
+    #[cfg(windows)]
+    if name.contains(&b'\\') || name.contains(&b':') {
+        return Err(Error::corrupt(format!(
+            "invalid tree entry name on Windows: {}",
+            String::from_utf8_lossy(name)
+        )));
+    }
     Ok(())
 }
 
