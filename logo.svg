@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-labelledby="title">
+  <title id="title">CVX crab mark</title>
+  <g fill="#aeb4ba">
+    <path d="M20 13c5.7 0 9.5 3.7 9.5 9v4.5c0 3.1-2.6 5.5-6 5.5h-7c-3.4 0-6-2.4-6-5.5V22c0-5.3 3.8-9 9.5-9Z"/>
+    <path d="M11 17.4 6.8 17C3.8 16.4 2.2 13.4 3.8 11c1.5-2.2 4.3-1.5 5.5.5.6 1 1 2.1 1.4 3.2L12 15.9Z"/>
+    <path d="M29 17.4l4.2-.4c3-.6 4.6-3.6 3-6-1.5-2.2-4.3-1.5-5.5.5-.6 1-1 2.1-1.4 3.2L28 15.9Z"/>
+  </g>
+  <g fill="none" stroke="#aeb4ba" stroke-width="2.2" stroke-linecap="round">
+    <path d="m10.7 25.7-3.5 2.2M29.3 25.7l3.5 2.2M12.1 28.7l-2.4 2.7M27.9 28.7l2.4 2.7"/>
+  </g>
+  <g fill="#08090a">
+    <circle cx="16.4" cy="20.3" r="1.5"/>
+    <circle cx="23.6" cy="20.3" r="1.5"/>
+  </g>
+</svg>

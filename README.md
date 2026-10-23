@@ -1,4 +1,6 @@
-# CVX 🦀
+<p align="center"><img src="logo.svg" alt="CVX crab logo" width="72" height="72"></p>
+
+# CVX
 
 **Own your history. Connect your code.**
 
