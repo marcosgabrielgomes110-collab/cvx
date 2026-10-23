@@ -932,6 +932,14 @@ fn config_value(value: &str) -> String {
 
 fn normalize_remote_url(url: &str) -> Result<String> {
     if url.contains("://") {
+        if let Some((_, rest)) = url.split_once("://")
+            && let Some((authority, _)) = rest.split_once('/')
+            && authority.contains('@')
+        {
+            return Err(Error::Message(
+                "credentials in remote URLs are not supported; use the credential store".to_owned(),
+            ));
+        }
         return Ok(url.to_owned());
     }
     let path = Path::new(url);

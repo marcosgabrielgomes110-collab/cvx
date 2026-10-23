@@ -7,7 +7,7 @@ use std::time::Duration;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use cvx_core::{Error, Result};
-use cvx_credential::{Credential, resolve_for_host};
+use cvx_credential::resolve_for_host;
 use cvx_object::{HashAlgorithm, ObjectId};
 use cvx_protocol::{
     AGENT, FetchRequest, LsRefsRequest, PktLine, encode_data, flush, parse_all, read_from,
@@ -114,10 +114,12 @@ impl HttpTransport {
     /// Opens an HTTP(S) transport for a repository URL.
     pub fn open(url: &str) -> Result<Self> {
         let parsed = ParsedUrl::parse(url)?;
-        let credential = match parsed.userinfo {
-            Some((username, password)) => Some(Credential { username, password }),
-            None => resolve_for_host(&parsed.host)?,
-        };
+        let credential = resolve_for_host(&parsed.host)?;
+        if parsed.base.starts_with("http://") && credential.is_some() {
+            return Err(Error::Message(
+                "refusing to send credentials over plaintext HTTP".to_owned(),
+            ));
+        }
         let auth = credential.map(|credential| {
             format!(
                 "Basic {}",
@@ -504,7 +506,6 @@ impl HttpTransport {
 struct ParsedUrl {
     base: String,
     host: String,
-    userinfo: Option<(String, String)>,
 }
 
 impl ParsedUrl {
@@ -525,9 +526,13 @@ impl ParsedUrl {
             return Err(Error::Message(format!("invalid repository URL: {url}")));
         }
 
-        let (userinfo, host_authority) = match authority.rsplit_once('@') {
-            Some((userinfo, host)) => (Some(parse_userinfo(userinfo)?), host),
-            None => (None, authority),
+        let host_authority = if authority.contains('@') {
+            return Err(Error::Message(
+                "credentials in repository URLs are not supported; use the credential store"
+                    .to_owned(),
+            ));
+        } else {
+            authority
         };
         let host = host_authority
             .split(':')
@@ -536,18 +541,7 @@ impl ParsedUrl {
             .to_ascii_lowercase();
         let path = path.trim_end_matches('/');
         let base = format!("{scheme}://{host_authority}{path}");
-        Ok(Self {
-            base,
-            host,
-            userinfo,
-        })
-    }
-}
-
-fn parse_userinfo(value: &str) -> Result<(String, String)> {
-    match value.split_once(':') {
-        Some((username, password)) => Ok((username.to_owned(), password.to_owned())),
-        None => Ok((value.to_owned(), String::new())),
+        Ok(Self { base, host })
     }
 }
 
@@ -973,13 +967,9 @@ mod tests {
         let parsed = ParsedUrl::parse("https://github.com/owner/repo.git").expect("parse");
         assert_eq!(parsed.base, "https://github.com/owner/repo.git");
         assert_eq!(parsed.host, "github.com");
-        assert!(parsed.userinfo.is_none());
 
-        let parsed = ParsedUrl::parse("https://token@github.com/owner/repo.git/").expect("parse");
-        assert_eq!(parsed.base, "https://github.com/owner/repo.git");
-        assert_eq!(parsed.host, "github.com");
-        assert_eq!(parsed.userinfo, Some(("token".to_owned(), String::new())));
-
+        assert!(ParsedUrl::parse("https://token@github.com/owner/repo.git/").is_err());
+        assert!(ParsedUrl::parse("https://user:pass@github.com/owner/repo.git").is_err());
         assert!(ParsedUrl::parse("ssh://github.com/owner/repo.git").is_err());
         assert!(ParsedUrl::parse("not-a-url").is_err());
     }

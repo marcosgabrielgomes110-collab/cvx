@@ -232,7 +232,8 @@ pub fn resolve_for_host(host: &str) -> Result<Option<Credential>> {
     let token = env::var("CVX_TOKEN")
         .ok()
         .or_else(|| env::var("GITHUB_TOKEN").ok())
-        .filter(|value| !value.is_empty());
+        .filter(|value| !value.is_empty())
+        .filter(|_| host_allowed(host));
     if let Some(token) = token {
         let username = env::var("CVX_USERNAME")
             .ok()
@@ -256,6 +257,21 @@ pub fn parse_helper_input(input: &str) -> BTreeMap<String, String> {
         }
     }
     fields
+}
+
+fn host_allowed(host: &str) -> bool {
+    let configured = env::var("CVX_TOKEN_HOST")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "github.com,*.github.com".to_owned());
+    configured.split(',').any(|entry| {
+        let entry = entry.trim().to_ascii_lowercase();
+        if let Some(suffix) = entry.strip_prefix("*.") {
+            host == suffix || host.ends_with(&format!(".{suffix}"))
+        } else {
+            host == entry
+        }
+    })
 }
 
 fn default_username() -> String {
