@@ -20,7 +20,7 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>> {
         return Err(Error::corrupt("pack delta result is too large"));
     }
 
-    let mut result = Vec::with_capacity(result_size as usize);
+    let mut result = Vec::with_capacity((result_size as usize).min(1024 * 1024));
 
     while position < delta.len() {
         let opcode = delta[position];
@@ -62,6 +62,15 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>> {
             if end > base.len() {
                 return Err(Error::corrupt("pack delta copies outside the base object"));
             }
+            if result
+                .len()
+                .checked_add(length)
+                .is_none_or(|size| size as u64 > result_size || size as u64 > MAX_RESULT_SIZE)
+            {
+                return Err(Error::corrupt(
+                    "pack delta exceeds its declared result size",
+                ));
+            }
             result.extend_from_slice(&base[start..end]);
         } else if opcode != 0 {
             let end = position
@@ -69,6 +78,16 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>> {
                 .ok_or_else(|| Error::corrupt("pack delta insert length overflow"))?;
             if end > delta.len() {
                 return Err(Error::corrupt("pack delta insert is truncated"));
+            }
+            let length = end - position;
+            if result
+                .len()
+                .checked_add(length)
+                .is_none_or(|size| size as u64 > result_size || size as u64 > MAX_RESULT_SIZE)
+            {
+                return Err(Error::corrupt(
+                    "pack delta exceeds its declared result size",
+                ));
             }
             result.extend_from_slice(&delta[position..end]);
             position = end;
@@ -261,6 +280,13 @@ mod tests {
         // result: "hello world"
         let delta = [5, 11, 0x90, 5, 6, b' ', b'w', b'o', b'r', b'l', b'd'];
         assert_eq!(apply_delta(b"hello", &delta).unwrap(), b"hello world");
+    }
+
+    #[test]
+    fn rejects_delta_that_grows_past_declared_size() {
+        // base size 5, result size 5, copy offset 0 size 5 twice
+        let delta = [5, 5, 0x90, 5, 0x90, 5];
+        assert!(apply_delta(b"hello", &delta).is_err());
     }
 
     #[test]

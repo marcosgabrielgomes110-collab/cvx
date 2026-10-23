@@ -31,6 +31,7 @@ pub struct Pack {
     file_len: u64,
     index: PackIndex,
     cache: RefCell<HashMap<u64, PackObject>>,
+    cache_bytes: RefCell<usize>,
     object_count: usize,
     algorithm: HashAlgorithm,
 }
@@ -120,6 +121,7 @@ impl Pack {
             file_len,
             index,
             cache: RefCell::new(HashMap::new()),
+            cache_bytes: RefCell::new(0),
             object_count,
             algorithm,
         })
@@ -226,7 +228,15 @@ impl Pack {
             }
         };
 
-        self.cache.borrow_mut().insert(offset, object.clone());
+        if object.data.len() <= 4 * 1024 * 1024 {
+            let mut bytes = self.cache_bytes.borrow_mut();
+            if bytes.saturating_add(object.data.len()) > 64 * 1024 * 1024 {
+                self.cache.borrow_mut().clear();
+                *bytes = 0;
+            }
+            self.cache.borrow_mut().insert(offset, object.clone());
+            *bytes += object.data.len();
+        }
         Ok(object)
     }
 

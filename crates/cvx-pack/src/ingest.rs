@@ -8,6 +8,8 @@ use flate2::read::ZlibDecoder;
 use crate::delta::apply_delta;
 
 const MAX_OBJECT_SIZE: u64 = 1024 * 1024 * 1024;
+const MAX_PACK_OBJECTS: usize = 10_000_000;
+const MAX_TOTAL_INFLATED: u64 = 4 * 1024 * 1024 * 1024;
 
 /// An object decoded from a received packfile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,8 +68,14 @@ where
         return Err(Error::unsupported(format!("packfile version {version}")));
     }
     let count = u32::from_be_bytes(bytes[8..12].try_into().expect("length checked")) as usize;
+    if count > MAX_PACK_OBJECTS || count > payload_end.saturating_sub(12) + 1 {
+        return Err(Error::corrupt(
+            "received pack has an implausible object count",
+        ));
+    }
 
-    let mut objects: Vec<IngestedObject> = Vec::with_capacity(count);
+    let mut objects: Vec<IngestedObject> = Vec::with_capacity(count.min(1_000_000));
+    let mut inflated_total = 0u64;
     let mut by_offset: HashMap<usize, usize> = HashMap::new();
     let mut by_oid: HashMap<ObjectId, usize> = HashMap::new();
     let mut external: HashMap<ObjectId, IngestedObject> = HashMap::new();
@@ -159,6 +167,10 @@ where
         if data.len() as u64 > MAX_OBJECT_SIZE {
             return Err(Error::corrupt("received object exceeds the size limit"));
         }
+        inflated_total = inflated_total
+            .checked_add(data.len() as u64)
+            .filter(|total| *total <= MAX_TOTAL_INFLATED)
+            .ok_or_else(|| Error::corrupt("received pack exceeds the total size limit"))?;
 
         let oid = hash_object_with(algorithm, kind, &data);
         let index = objects.len();

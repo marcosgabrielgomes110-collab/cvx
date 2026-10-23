@@ -343,7 +343,8 @@ impl Repository {
     /// Recursively expands a tree into path-to-leaf entries.
     pub fn read_tree_recursive(&self, oid: ObjectId) -> Result<BTreeMap<Vec<u8>, TreeLeaf>> {
         let mut leaves = BTreeMap::new();
-        self.expand_tree(oid, &[], &mut leaves, 0)?;
+        let mut expanded = 0usize;
+        self.expand_tree(oid, &[], &mut leaves, 0, &mut expanded)?;
         Ok(leaves)
     }
 
@@ -353,12 +354,17 @@ impl Repository {
         prefix: &[u8],
         leaves: &mut BTreeMap<Vec<u8>, TreeLeaf>,
         depth: usize,
+        expanded: &mut usize,
     ) -> Result<()> {
         if depth > 64 {
             return Err(Error::corrupt("tree nesting is too deep"));
         }
 
         for entry in self.read_tree(oid)?.entries() {
+            *expanded = expanded
+                .checked_add(1)
+                .filter(|value| *value <= 1_000_000)
+                .ok_or_else(|| Error::corrupt("tree expands to too many entries"))?;
             let mut path = prefix.to_vec();
             if !path.is_empty() {
                 path.push(b'/');
@@ -366,7 +372,7 @@ impl Repository {
             path.extend_from_slice(&entry.name);
 
             if entry.is_tree() {
-                self.expand_tree(entry.oid, &path, leaves, depth + 1)?;
+                self.expand_tree(entry.oid, &path, leaves, depth + 1, expanded)?;
             } else {
                 leaves.insert(
                     path,
