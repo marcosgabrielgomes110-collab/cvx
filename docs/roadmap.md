@@ -16,7 +16,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
 | 9 | Streaming index/network and large-repository memory limits | Complete — v0.9.2 |
-| 10 | Security, concurrency and durability | Planned — v0.10.0 |
+| 10 | Security, concurrency and durability | In progress — v0.9.3 |
 | 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
 | 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
 | 13 | Production release | Planned — v1.0.0 |
@@ -205,15 +205,21 @@ Delivered groundwork in v0.8.1:
 
 ## Phase 10 — security, concurrency and durability (v0.10.0)
 
+Implemented in v0.9.3:
+
+- stale-lock repair through `fsck --repair` with an age threshold;
+- opt-in soak script with concurrent status readers;
+- HTTP timeout/retry controls and SSH strict host-key policy;
+- threat model, release checklist and SBOM generation.
+
 ### Data safety and concurrency
 
-- stale-lock automatic recovery and actionable diagnostics for every lock;
-- multi-process soak tests for index, refs, packs and `gc`;
+- stale-lock recovery automation beyond the explicit `fsck --repair` path;
+- automated multi-process soak tests for index, refs, packs and `gc`;
 - transactional multi-reference push (all refs or none);
 - crash-consistency tests for pack deletion, loose-object pruning and
   reflog-only history;
-- `cvx fsck --repair` for safe index/control-state recovery, never silent
-  object deletion;
+- `cvx fsck --repair` coverage for more control-state corruption;
 - explicit reflog retention policy in `gc` and an option to opt out of pruning;
 - durability review on Windows and network filesystems (fsync, replace and
   directory synchronization semantics).
@@ -224,7 +230,8 @@ Delivered groundwork in v0.8.1:
 - fetch negotiation with `have`/`ack`, bounded `want` sets and incremental
   packs;
 - side-band, push options, atomic push and `force-with-lease` coverage;
-- retries, timeouts, connection reuse, proxy support and custom TLS roots;
+- proxy support, custom TLS roots and connection reuse beyond the current
+  timeout/retry controls;
 - shallow fetch updates, `--unshallow` and partial-clone filters beyond
   `blob:none`;
 - network chaos tests: truncation, redirects, expired tokens, rate limits and
@@ -232,10 +239,11 @@ Delivered groundwork in v0.8.1:
 
 ### Security and supply chain
 
-- formal threat model and independent security audit of parsers, transports,
-  credential handling and worktree writes;
+- independent security audit of parsers, transports, credential handling and
+  worktree writes (the threat model is now documented);
 - continuous fuzzing in CI, not only deterministic property tests;
-- `cargo-audit`/`cargo-deny`, dependency policy and SBOM generation;
+- `cargo-audit`/`cargo-deny` and dependency policy (SBOM generation is now in
+  the release workflow);
 - build provenance and mandatory signed release artifacts;
 - reproducible builds across Linux, macOS and Windows toolchains;
 - strict SSH host-key policy option and documented `known_hosts` workflow;

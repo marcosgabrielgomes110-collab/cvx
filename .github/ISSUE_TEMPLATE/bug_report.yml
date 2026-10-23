@@ -13,7 +13,7 @@ body:
     attributes:
       label: CVX version
       description: Output of `cvx version`.
-      placeholder: "cvx 0.9.2"
+      placeholder: "cvx 0.9.3"
     validations:
       required: true
   - type: input

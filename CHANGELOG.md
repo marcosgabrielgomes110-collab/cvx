@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.9.2 work._
+_Post-0.9.3 work._
+
+## [0.9.3] - 2026-10-23
+
+### Added
+
+- `fsck --repair` removes stale repository locks with a configurable
+  `CVX_STALE_LOCK_AGE_SECS` threshold.
+- Opt-in multi-process soak script and network timeout/retry controls.
+- `CVX_SSH_STRICT_HOST_KEY_CHECKING` for explicit known_hosts policy.
+- Threat model and release checklist documentation.
+- SBOM generation in the release workflow.
+
+### Changed
+
+- Phase 10 data-safety, network and security groundwork is documented;
+  external audit, mandatory signing, reproducible cross-toolchain builds and
+  full network chaos coverage remain open.
 
 ## [0.9.2] - 2026-10-23
 

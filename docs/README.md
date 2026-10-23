@@ -9,6 +9,8 @@ Start here:
 - [Roadmap](roadmap.md)
 - [Benchmarks and reporting format](benchmarks.md)
 - [Hardening: fuzz tests, failpoints and recovery](hardening.md)
+- [Threat model](threat-model.md)
+- [Release checklist](release-checklist.md)
 
 Reference material:
 
