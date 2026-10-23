@@ -117,7 +117,7 @@ impl Repository {
         }
 
         let tree = self.build_tree(&index)?;
-        let head_oid = self.head()?.oid();
+        let head_oid = parents.first().copied();
         let parent_commit = match parents.first() {
             Some(oid) => Some(self.read_commit(*oid)?),
             None => None,
@@ -528,6 +528,30 @@ mod tests {
 
         let commit = repository.read_commit(second.oid).expect("read");
         assert_eq!(commit.parents, vec![first.oid]);
+    }
+
+    #[test]
+    fn rejects_a_commit_with_a_stale_parent() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let repository = repository(temp.path());
+        std::fs::write(temp.path().join("hello.txt"), "hello\n").expect("write");
+        add_all(&repository, temp.path());
+        let first = repository.commit(options("first")).expect("first");
+        std::fs::write(temp.path().join("hello.txt"), "second\n").expect("write");
+        add_all(&repository, temp.path());
+        let second = repository.commit(options("second")).expect("second");
+
+        let result = repository.commit_with_parents(
+            vec!["stale".to_owned()],
+            vec![first.oid],
+            true,
+        );
+        assert!(result.is_err(), "stale parent must be rejected");
+        assert_eq!(
+            repository.head().expect("head").oid(),
+            Some(second.oid),
+            "failed commit must not move HEAD"
+        );
     }
 
     #[test]
