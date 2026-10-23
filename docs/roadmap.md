@@ -15,7 +15,7 @@ is implemented, covered by tests and documented in the compatibility matrix.
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs, SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Streaming index/network, thin-pack generation and large-repo memory limits | In progress — v0.9.0 |
+| 9 | Streaming index/network and large-repository memory limits | In progress — v0.9.1 |
 | 10 | Security, concurrency and durability | Planned — v0.10.0 |
 | 11 | Git completeness, GitHub surface, packaging and operations | Planned — v0.11.0 |
 | 12 | Release-candidate stabilization and real-repository soak tests | Planned — v1.0.0-rc.1 |
@@ -170,13 +170,16 @@ Remaining:
 This phase is about making the engine safe for large repositories and real
 network traffic. It is the next release, not a feature-only milestone.
 
-Implemented in v0.9.0:
+Implemented in v0.9.0/v0.9.1:
 
 - `cvx fsck --repair` rebuilds a missing or unreadable index from `HEAD`;
 - clone and `gc` pack writing streams through a temporary file with an
   incremental checksum instead of holding the complete pack in memory;
 - pack publication remains ordered before index publication and preserves the
-  `pack.before-index` crash point.
+  `pack.before-index` crash point;
+- network push emits thin packs against remote-known bases and falls back when
+  the server does not advertise `thin-pack`;
+- `push --force-with-lease` validates the local remote-tracking ref.
 
 Delivered groundwork in v0.8.1:
 
@@ -199,7 +202,6 @@ Delivered groundwork in v0.8.1:
 
 ### Network and wire protocol
 
-- thin-pack generation for push, not only ingestion;
 - end-to-end SHA-256 tests against real HTTPS and SSH Git servers;
 - fetch negotiation with `have`/`ack`, bounded `want` sets and incremental
   packs;
@@ -217,7 +219,6 @@ Delivered groundwork in v0.8.1:
   documented memory ceiling;
 - pack writing for clone and `gc` is streamed (done); push-pack streaming and
   index/network streaming remain;
-- thin-pack generation is covered by push tests against a real Git server;
 - SHA-256 clone/fetch/push pass against local HTTP and SSH servers;
 - large-repository benchmarks run in CI with an explicit memory budget.
 

@@ -291,8 +291,12 @@ pub struct PushArgs {
     pub branch: Option<String>,
 
     /// Allow non-fast-forward updates.
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "force_with_lease")]
     pub force: bool,
+
+    /// Require the remote to match the local remote-tracking ref.
+    #[arg(long)]
+    pub force_with_lease: bool,
 }
 
 /// Arguments for `cvx credential`.

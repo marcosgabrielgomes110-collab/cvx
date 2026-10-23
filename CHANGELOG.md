@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Post-0.9.0 work._
+_Post-0.9.1 work._
+
+## [0.9.1] - 2026-10-23
+
+### Added
+
+- Thin-pack generation for network pushes, using ref-deltas against bases
+  known to exist on the remote; falls back to a full pack when the server does
+  not advertise `thin-pack`.
+- `cvx push --force-with-lease`, checked against the local remote-tracking ref.
+
+### Changed
+
+- Push computes only objects absent from the remote when the old tip is
+  available locally, reducing transfer size for incremental pushes.
 
 ## [0.9.0] - 2026-10-23
 

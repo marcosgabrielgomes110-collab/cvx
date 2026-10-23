@@ -12,6 +12,7 @@ pub fn run(args: PushArgs) -> Result<()> {
         remote: args.remote,
         branch: args.branch,
         force: args.force,
+        force_with_lease: args.force_with_lease,
     })?;
 
     let old = outcome

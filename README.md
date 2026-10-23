@@ -10,7 +10,7 @@ CVX (Code Version eXchange) is a Git-compatible version control system written
 in Rust. It reads and writes the Git repository format, so existing history and
 tooling keep working, but the engine does not shell out to the `git` executable.
 
-> **Status: 0.9.0 release.** The local core, history editing, maintenance,
+> **Status: 0.9.1 release.** The local core, history editing, maintenance,
 > merge, HTTPS/SSH transport, GitHub workflows, bare repositories, file-backed
 > pack reads and thin-pack ingestion are implemented. This includes delta
 > packs, SHA-256 protocol negotiation, property-based fuzzing, crash failpoints,
@@ -117,13 +117,13 @@ Implemented:
 - file-backed pack reads and thin-pack ingestion during fetch;
 - SHA-256 protocol negotiation over HTTPS and SSH;
 - commit and pre-push hooks, lock timeouts and reset pathspecs;
-- streamed pack writing for clone/gc and `cvx fsck --repair`;
+- streamed pack writing for clone/gc, thin-pack generation and `cvx fsck --repair`;
 - bare repositories for init, clone, fetch, push, log, fsck and gc;
 - safe worktree checkout with path, symlink and untracked-file protection;
 - differential tests against the official Git binary.
 
 Not implemented yet: index/network response streaming with bounded memory,
-push-pack streaming, thin-pack generation, shallow fetch updates/unshallow, `--filter` for local
+push-pack streaming, shallow fetch updates/unshallow, `--filter` for local
 paths, automatic pagination beyond the first 100 entries, submodules, LFS,
 commit signing, remaining hook types, working-tree encodings, diff/merge
 attribute drivers, and fully reproducible cross-toolchain builds.
@@ -216,7 +216,7 @@ mode, including repositories packed by `git gc`.
 | `cvx clone <URL> [DIR]` | Local, `file://`, `https://`, `ssh://`; `--branch`, `--storage`, `--depth`, `--filter`, `--bare` |
 | `cvx remote [list]` | `add <NAME> <URL>` |
 | `cvx fetch [REMOTE]` | Updates `refs/remotes/*` and tags |
-| `cvx push [REMOTE] [BRANCH]` | `-f/--force` for non-fast-forward updates |
+| `cvx push [REMOTE] [BRANCH]` | `-f/--force`, `--force-with-lease`; thin packs when supported |
 | `cvx credential store <HOST>` | Reads the token from stdin; `--username` |
 | `cvx credential list` / `remove <HOST>` | Never prints stored secrets |
 | `cvx credential fill` / `approve` / `reject` | Git credential-helper protocol |
@@ -306,7 +306,7 @@ use the file backend).
 | 6 | Maintenance and history editing: fsck, gc, reset, cherry-pick, revert, stash | Complete — v0.5.0 |
 | 7 | Reliability, delta packs and bare repositories | Complete — v0.6.0 |
 | 8 | Streaming pack reads, thin packs and SHA-256 network negotiation | Complete — v0.7.1 |
-| 9 | Streaming index/network, thin packs and large-repository memory limits | In progress — v0.9.0 |
+| 9 | Streaming index/network and large-repository memory limits | In progress — v0.9.1 |
 | 10 | Security, concurrency and durability | Planned — v0.10.0 |
 | 11 | Git completeness, GitHub surface and packaging | Planned — v0.11.0 |
 | 12 | Release candidate and real-repository soak tests | Planned — v1.0.0-rc.1 |

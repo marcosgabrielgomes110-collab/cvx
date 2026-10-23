@@ -81,6 +81,7 @@ impl<'a> GitHubWorkflows<'a> {
             remote: Some(self.remote.clone()),
             branch: branch.map(str::to_owned),
             force: false,
+            force_with_lease: false,
         })?;
         Ok(created)
     }

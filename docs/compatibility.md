@@ -101,6 +101,7 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Annotated and lightweight tags | Yes |
 | Pack writing | Yes | Offset deltas and version-2 indexes |
 | Pack ingestion | Yes | Thin-pack bases are completed from the local object database |
+| Thin-pack generation | Yes | Network push uses ref-deltas and falls back when unsupported |
 | Clone / fetch / push over local paths | Yes | `file://` and filesystem paths |
 | Clone / fetch / push over HTTPS | Yes | Protocol v2 fetch, receive-pack push |
 | Clone / fetch / push over SSH | Yes | System OpenSSH, keys and `ssh-agent` |

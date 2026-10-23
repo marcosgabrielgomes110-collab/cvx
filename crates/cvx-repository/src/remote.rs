@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use cvx_core::{Error, IoResultExt, Result};
 use cvx_index::IndexLock;
 use cvx_object::ObjectId;
-use cvx_pack::PackInput;
+use cvx_pack::{PackBase, PackInput};
 use cvx_transport::{NetworkTransport, PushCommand, looks_like_scp};
 
 use crate::init::{InitOptions, InitStorage};
@@ -80,6 +80,8 @@ pub struct PushOptions {
     pub branch: Option<String>,
     /// Allow non-fast-forward updates.
     pub force: bool,
+    /// Require the remote value to match the local remote-tracking ref.
+    pub force_with_lease: bool,
 }
 
 /// Result of a push.
@@ -603,6 +605,7 @@ impl Repository {
             ));
         }
         let old = remote.refs().read_ref(&reference)?;
+        self.check_lease(options, remote_name, &branch, old)?;
         self.run_pre_push(remote_name, &url, &reference, tip, old)?;
 
         let objects = self.reachable_objects(&[tip])?;
@@ -669,6 +672,7 @@ impl Repository {
             .find(|remote| remote.name == reference)
             .map(|remote| remote.oid);
 
+        self.check_lease(options, remote_name, branch, old)?;
         self.run_pre_push(remote_name, url, &reference, tip, old)?;
         if let Some(old) = old
             && old != tip
@@ -681,7 +685,26 @@ impl Repository {
             )));
         }
 
-        let objects = self.reachable_objects(&[tip])?;
+        let mut objects = self.reachable_objects(&[tip])?;
+        let mut base_data: Vec<(cvx_object::ObjectKind, ObjectId, Vec<u8>)> = Vec::new();
+        if advertisement.capabilities.contains_key("thin-pack")
+            && let Some(old) = old
+            && self.objects().contains(old)?
+        {
+            let remote_objects = self.reachable_objects(&[old])?;
+            let remote_set: BTreeSet<ObjectId> = remote_objects.iter().copied().collect();
+            objects.retain(|oid| !remote_set.contains(oid));
+            let mut budget = 32 * 1024 * 1024usize;
+            for oid in remote_objects.iter().take(256) {
+                let object = self.read_object(*oid)?;
+                if object.data.len() > 8 * 1024 * 1024 || object.data.len() > budget {
+                    continue;
+                }
+                budget -= object.data.len();
+                base_data.push((object.kind, *oid, object.data));
+            }
+        }
+
         let mut contents = Vec::with_capacity(objects.len());
         for oid in &objects {
             let object = self.read_object(*oid)?;
@@ -691,7 +714,19 @@ impl Repository {
             .iter()
             .map(|(kind, data)| PackInput { kind: *kind, data })
             .collect();
-        let pack = cvx_pack::encode_pack_with_algorithm(&inputs, self.hash_algorithm())?;
+        let bases: Vec<PackBase<'_>> = base_data
+            .iter()
+            .map(|(kind, oid, data)| PackBase {
+                oid: *oid,
+                kind: *kind,
+                data,
+            })
+            .collect();
+        let pack = if bases.is_empty() {
+            cvx_pack::encode_pack_with_algorithm(&inputs, self.hash_algorithm())?
+        } else {
+            cvx_pack::encode_pack_thin_with_algorithm(&inputs, &bases, self.hash_algorithm())?
+        };
 
         transport.push(
             &[PushCommand {
@@ -709,6 +744,26 @@ impl Repository {
             new: tip,
             objects: objects.len(),
         })
+    }
+
+    fn check_lease(
+        &self,
+        options: &PushOptions,
+        remote_name: &str,
+        branch: &str,
+        remote_old: Option<ObjectId>,
+    ) -> Result<()> {
+        if !options.force_with_lease {
+            return Ok(());
+        }
+        let tracking = format!("refs/remotes/{remote_name}/{branch}");
+        let expected = self.refs().read_ref(&tracking)?;
+        if expected != remote_old {
+            return Err(Error::Message(format!(
+                "push rejected: remote '{branch}' changed; fetch and retry"
+            )));
+        }
+        Ok(())
     }
 
     fn run_pre_push(

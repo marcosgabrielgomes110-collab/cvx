@@ -19,6 +19,7 @@ pub use delta::apply_delta;
 pub use ingest::{IngestedObject, ingest_pack, ingest_pack_with_algorithm, ingest_pack_with_bases};
 pub use pack::{Pack, PackObject};
 pub use writer::{
-    PackInput, PackWriteOutcome, PackedObject, encode_pack, encode_pack_with_algorithm, write_pack,
+    PackBase, PackInput, PackWriteOutcome, PackedObject, encode_pack,
+    encode_pack_thin_with_algorithm, encode_pack_with_algorithm, write_pack,
     write_pack_with_algorithm,
 };

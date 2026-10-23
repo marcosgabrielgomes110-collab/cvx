@@ -259,6 +259,9 @@ impl HttpTransport {
         if advertisement.capabilities.contains_key("ofs-delta") {
             capabilities.push("ofs-delta".to_owned());
         }
+        if advertisement.capabilities.contains_key("thin-pack") {
+            capabilities.push("thin-pack".to_owned());
+        }
         capabilities.push(format!("agent={AGENT}"));
 
         let mut body = Vec::new();

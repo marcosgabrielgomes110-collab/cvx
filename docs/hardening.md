@@ -107,7 +107,9 @@ pack in memory and is tracked as remaining work.
 
 Fetch requests thin packs. Ref-delta bases missing from the incoming pack are
 resolved from the local object database; an unknown base is still rejected
-explicitly.
+explicitly. Network push generates thin packs against bases reachable from the
+remote tip and falls back to a complete pack when `thin-pack` is not
+advertised.
 
 ## Hooks and lock contention
 

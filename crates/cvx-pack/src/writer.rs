@@ -21,6 +21,18 @@ pub struct PackInput<'a> {
     pub data: &'a [u8],
 }
 
+/// An object that is known to exist on the receiving side and can be used as
+/// a ref-delta base without being written into the pack.
+#[derive(Debug, Clone, Copy)]
+pub struct PackBase<'a> {
+    /// Base object identifier.
+    pub oid: ObjectId,
+    /// Base object type.
+    pub kind: ObjectKind,
+    /// Uncompressed base payload.
+    pub data: &'a [u8],
+}
+
 /// Information about an object written to a packfile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackedObject {
@@ -70,7 +82,7 @@ pub fn write_pack_with_algorithm(
         .prefix(".cvx-pack-")
         .tempfile_in(directory)
         .map_err(|error| Error::io(directory.display().to_string(), error))?;
-    let built = build_pack_to(temp.as_file_mut(), inputs, algorithm)?;
+    let built = build_pack_to(temp.as_file_mut(), inputs, &[], algorithm)?;
     temp.as_file()
         .sync_all()
         .map_err(|error| Error::io(temp.path().display().to_string(), error))?;
@@ -119,7 +131,18 @@ pub fn encode_pack_with_algorithm(
     algorithm: HashAlgorithm,
 ) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    build_pack_to(&mut bytes, inputs, algorithm)?;
+    build_pack_to(&mut bytes, inputs, &[], algorithm)?;
+    Ok(bytes)
+}
+
+/// Builds a pack that may reference bases already present on the receiver.
+pub fn encode_pack_thin_with_algorithm(
+    inputs: &[PackInput<'_>],
+    bases: &[PackBase<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    build_pack_to(&mut bytes, inputs, bases, algorithm)?;
     Ok(bytes)
 }
 
@@ -133,6 +156,7 @@ struct BuiltPack {
 fn build_pack_to<W: Write>(
     writer: &mut W,
     inputs: &[PackInput<'_>],
+    bases: &[PackBase<'_>],
     algorithm: HashAlgorithm,
 ) -> Result<BuiltPack> {
     let mut objects: BTreeMap<ObjectId, (ObjectKind, &[u8])> = BTreeMap::new();
@@ -208,6 +232,38 @@ fn build_pack_to<W: Write>(
                     base.depth + 1,
                 ));
                 if total * 2 < data.len() {
+                    break;
+                }
+            }
+        }
+
+        for base in bases
+            .iter()
+            .filter(|base| base.kind == kind)
+            .take(MAX_WRITE_DELTA_CANDIDATES)
+        {
+            if data.len() > MAX_WRITE_DELTA_INPUT || base.data.len() > MAX_WRITE_DELTA_INPUT {
+                continue;
+            }
+            if base.oid == oid || (base.data.len() == data.len() && base.data == data) {
+                continue;
+            }
+            if !worth_delta(base.data, data) {
+                continue;
+            }
+            let delta = crate::delta::create_delta(base.data, data);
+            if delta.len() >= data.len() {
+                continue;
+            }
+            let delta_header = object_header_code(7, delta.len() as u64)?;
+            let delta_compressed = compress(&delta)?;
+            let mut entry = delta_header;
+            entry.extend_from_slice(base.oid.as_bytes());
+            entry.extend_from_slice(&delta_compressed);
+            if entry.len() < best_size {
+                best_size = entry.len();
+                chosen = Some((entry, 1));
+                if best_size * 2 < data.len() {
                     break;
                 }
             }
@@ -572,6 +628,39 @@ mod tests {
             "git verify-pack failed: {}",
             String::from_utf8_lossy(&verify.stderr)
         );
+    }
+
+    #[test]
+    fn writes_ref_deltas_against_external_bases() {
+        let base = b"line one\nline two\nline three\n".repeat(2000);
+        let mut target = base.clone();
+        target.extend_from_slice(b"line four\n");
+        let base_oid = hash_object_with(HashAlgorithm::Sha1, ObjectKind::Blob, &base);
+        let pack = encode_pack_thin_with_algorithm(
+            &[PackInput {
+                kind: ObjectKind::Blob,
+                data: &target,
+            }],
+            &[PackBase {
+                oid: base_oid,
+                kind: ObjectKind::Blob,
+                data: &base,
+            }],
+            HashAlgorithm::Sha1,
+        )
+        .expect("thin pack");
+        assert_eq!((pack[12] >> 4) & 7, 7, "expected a ref delta");
+        let objects = crate::ingest_pack_with_bases(&pack, HashAlgorithm::Sha1, |oid| {
+            assert_eq!(oid, base_oid);
+            Ok(Some(crate::IngestedObject {
+                oid: base_oid,
+                kind: ObjectKind::Blob,
+                data: base.clone(),
+            }))
+        })
+        .expect("ingest thin pack");
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].data, target);
     }
 
     #[test]
