@@ -262,7 +262,7 @@ impl Repository {
                     return Err(Error::object_not_found(oid.to_string()));
                 };
                 let transport = NetworkTransport::open(&url)?;
-                let response = transport.fetch_full_with_algorithm(
+                let response = transport.fetch_full_to_file(
                     &[oid],
                     None,
                     &[],
@@ -270,9 +270,11 @@ impl Repository {
                     self.hash_algorithm(),
                     true,
                 )?;
-                for object in
-                    self.ingest_pack_with_local_bases(&response.pack, self.hash_algorithm())?
-                {
+                let pack = std::fs::read(&response.pack_path)
+                    .map_err(|error| Error::io(response.pack_path.display().to_string(), error));
+                let _ = std::fs::remove_file(&response.pack_path);
+                let pack = pack?;
+                for object in self.ingest_pack_with_local_bases(&pack, self.hash_algorithm())? {
                     self.objects().write(object.kind, &object.data)?;
                 }
                 self.objects().read(oid)

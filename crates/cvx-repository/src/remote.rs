@@ -336,7 +336,7 @@ impl Repository {
                 ));
             }
         }
-        let response = transport.fetch_full_with_algorithm(
+        let response = transport.fetch_full_to_file(
             &wants,
             options.depth,
             &[],
@@ -344,7 +344,8 @@ impl Repository {
             algorithm,
             false,
         )?;
-        let objects = cvx_pack::ingest_pack_with_bases(&response.pack, algorithm, |_| Ok(None))?;
+        let pack = read_pack_file(&response.pack_path)?;
+        let objects = cvx_pack::ingest_pack_with_bases(&pack, algorithm, |_| Ok(None))?;
 
         let init = Repository::init(InitOptions {
             directory: options.directory.clone(),
@@ -498,7 +499,7 @@ impl Repository {
 
         let mut copied = 0;
         if !wants.is_empty() {
-            let response = transport.fetch_full_with_algorithm(
+            let response = transport.fetch_full_to_file(
                 &wants,
                 None,
                 &[],
@@ -506,9 +507,8 @@ impl Repository {
                 self.hash_algorithm(),
                 true,
             )?;
-            for object in
-                self.ingest_pack_with_local_bases(&response.pack, self.hash_algorithm())?
-            {
+            let pack = read_pack_file(&response.pack_path)?;
+            for object in self.ingest_pack_with_local_bases(&pack, self.hash_algorithm())? {
                 if !self.objects().contains(object.oid)? {
                     self.objects().write(object.kind, &object.data)?;
                     copied += 1;
@@ -869,6 +869,18 @@ fn ensure_empty_destination(directory: &Path) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+fn read_pack_file(path: &Path) -> Result<Vec<u8>> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = std::fs::remove_file(path);
+            return Err(Error::io(path.display().to_string(), error));
+        }
+    };
+    let _ = std::fs::remove_file(path);
+    Ok(bytes)
 }
 
 fn is_network_url(url: &str) -> bool {

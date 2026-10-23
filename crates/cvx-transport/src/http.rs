@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{BufReader, Read, Write};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use base64::Engine;
@@ -7,7 +8,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use cvx_core::{Error, Result};
 use cvx_credential::{Credential, resolve_for_host};
 use cvx_object::{HashAlgorithm, ObjectId};
-use cvx_protocol::{AGENT, FetchRequest, LsRefsRequest, PktLine, encode_data, flush, parse_all};
+use cvx_protocol::{
+    AGENT, FetchRequest, LsRefsRequest, PktLine, encode_data, flush, parse_all, read_from,
+};
 
 const MAX_BODY: u64 = 2 * 1024 * 1024 * 1024;
 
@@ -22,6 +25,17 @@ pub struct RemoteRef {
     pub peeled: Option<ObjectId>,
     /// Symbolic target for symbolic references.
     pub symref: Option<String>,
+}
+
+/// Fetch response whose pack is spooled to a temporary file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FetchResponseFile {
+    /// Temporary `.pack` file. The caller owns and must remove it.
+    pub pack_path: PathBuf,
+    /// Shallow boundaries reported by the server.
+    pub shallow: Vec<ObjectId>,
+    /// Commits that are no longer shallow.
+    pub unshallow: Vec<ObjectId>,
 }
 
 /// Parsed fetch response.
@@ -220,6 +234,36 @@ impl HttpTransport {
         parse_fetch_response(&response)
     }
 
+    /// Fetches with the pack spooled to a temporary file.
+    pub fn fetch_full_to_file(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponseFile> {
+        let request = FetchRequest {
+            wants: wants.to_vec(),
+            haves: Vec::new(),
+            done: true,
+            thin,
+            no_progress: true,
+            include_tag: true,
+            ofs_delta: true,
+            deepen,
+            shallow: shallow.to_vec(),
+            filter: filter.map(str::to_owned),
+            object_format: algorithm,
+        };
+        let body = request.encode()?;
+        let url = format!("{}/git-upload-pack", self.base);
+        let reader =
+            self.post_stream(&url, "application/x-git-upload-pack-request", &body, true)?;
+        parse_fetch_response_to_file(BufReader::new(reader))
+    }
+
     /// Discovers receive-pack references and capabilities.
     pub fn discover_receive_pack(&self) -> Result<ReceivePackAdvertisement> {
         let url = format!("{}/info/refs?service=git-receive-pack", self.base);
@@ -280,6 +324,26 @@ impl HttpTransport {
         let url = format!("{}/git-receive-pack", self.base);
         let response = self.post(&url, "application/x-git-receive-pack-request", &body, false)?;
         parse_push_response(&response)
+    }
+
+    fn post_stream(
+        &self,
+        url: &str,
+        content_type: &str,
+        body: &[u8],
+        protocol_v2: bool,
+    ) -> Result<Box<dyn Read>> {
+        let mut request = self.agent.post(url).set("Content-Type", content_type);
+        if let Some(auth) = &self.auth {
+            request = request.set("Authorization", auth);
+        }
+        if protocol_v2 {
+            request = request.set("Git-Protocol", "version=2");
+        }
+        let response = request
+            .send_bytes(body)
+            .map_err(|error| http_error(url, error))?;
+        Ok(Box::new(response.into_reader().take(MAX_BODY)))
     }
 
     fn get(&self, url: &str, protocol_v2: bool) -> Result<Vec<u8>> {
@@ -494,6 +558,91 @@ fn parse_unborn_head(line: &[u8]) -> Option<String> {
     text.split_whitespace()
         .find_map(|field| field.strip_prefix("symref-target:"))
         .map(str::to_owned)
+}
+
+pub(crate) fn parse_fetch_response_to_file<R: Read>(mut reader: R) -> Result<FetchResponseFile> {
+    let mut temp = tempfile::Builder::new()
+        .prefix("cvx-fetch-")
+        .tempfile()
+        .map_err(|error| Error::io("failed to create pack spool file", error))?;
+    let mut shallow = Vec::new();
+    let mut unshallow = Vec::new();
+    let mut in_packfile = false;
+    let mut pack_bytes = 0usize;
+
+    loop {
+        let packet = read_from(&mut reader)?;
+        let Some(packet) = packet else {
+            break;
+        };
+        let PktLine::Data(data) = packet else {
+            continue;
+        };
+        if !in_packfile {
+            let line = data.strip_suffix(b"\n").unwrap_or(&data);
+            if line == b"packfile" {
+                in_packfile = true;
+                continue;
+            }
+            if line.starts_with(b"ERR ") {
+                return Err(Error::Message(format!(
+                    "remote fetch error: {}",
+                    String::from_utf8_lossy(&line[4..])
+                )));
+            }
+            if let Some(value) = line.strip_prefix(b"shallow ") {
+                if let Ok(oid) = ObjectId::from_hex(&String::from_utf8_lossy(value)) {
+                    shallow.push(oid);
+                }
+                continue;
+            }
+            if let Some(value) = line.strip_prefix(b"unshallow ") {
+                if let Ok(oid) = ObjectId::from_hex(&String::from_utf8_lossy(value)) {
+                    unshallow.push(oid);
+                }
+                continue;
+            }
+            if data.first().is_some_and(|byte| (1..=3).contains(byte)) {
+                write_sideband(&mut temp, &data, &mut pack_bytes)?;
+            }
+            continue;
+        }
+        write_sideband(&mut temp, &data, &mut pack_bytes)?;
+    }
+
+    if pack_bytes == 0 {
+        return Err(Error::Message("remote did not send a packfile".to_owned()));
+    }
+    temp.flush()
+        .map_err(|error| Error::io("failed to flush pack spool file", error))?;
+    let (_, path) = temp
+        .keep()
+        .map_err(|error| Error::io("failed to persist pack spool file", error.error))?;
+    Ok(FetchResponseFile {
+        pack_path: path,
+        shallow,
+        unshallow,
+    })
+}
+
+fn write_sideband<W: Write>(writer: &mut W, data: &[u8], written: &mut usize) -> Result<()> {
+    match data.first().copied() {
+        Some(1) => {
+            writer
+                .write_all(&data[1..])
+                .map_err(|error| Error::io("failed to write pack spool file", error))?;
+            *written += data.len() - 1;
+            Ok(())
+        }
+        Some(2) => Ok(()),
+        Some(3) => Err(Error::Message(format!(
+            "remote error: {}",
+            String::from_utf8_lossy(&data[1..])
+        ))),
+        _ => Err(Error::corrupt(
+            "remote packfile is missing a sideband channel",
+        )),
+    }
 }
 
 pub(crate) fn parse_fetch_response(bytes: &[u8]) -> Result<FetchResponse> {
@@ -746,6 +895,21 @@ mod tests {
         body.extend(encode_data(b"\x02progress").expect("pkt"));
         body.extend(flush());
         assert_eq!(parse_fetch_response(&body).expect("pack").pack, b"PACKdata");
+    }
+
+    #[test]
+    fn spools_fetch_pack_to_a_file() {
+        let mut body =
+            encode_text("shallow 1111111111111111111111111111111111111111\n").expect("pkt");
+        body.extend(encode_text("packfile\n").expect("pkt"));
+        body.extend(encode_data(b"\x01PACKspooled").expect("pkt"));
+        body.extend(encode_data(b"\x02progress").expect("pkt"));
+        body.extend(flush());
+        let response = parse_fetch_response_to_file(std::io::Cursor::new(body)).expect("spool");
+        let pack = std::fs::read(&response.pack_path).expect("read spool");
+        assert_eq!(pack, b"PACKspooled");
+        assert_eq!(response.shallow.len(), 1);
+        let _ = std::fs::remove_file(response.pack_path);
     }
 
     #[test]

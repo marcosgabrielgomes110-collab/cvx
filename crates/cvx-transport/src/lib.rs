@@ -13,8 +13,8 @@ use cvx_core::{Error, Result};
 use cvx_object::ObjectId;
 
 pub use http::{
-    FetchResponse, HttpTransport, LsRefsResponse, PushCommand, PushRefStatus, PushReport,
-    ReceivePackAdvertisement, RemoteRef,
+    FetchResponse, FetchResponseFile, HttpTransport, LsRefsResponse, PushCommand, PushRefStatus,
+    PushReport, ReceivePackAdvertisement, RemoteRef,
 };
 pub use ssh::SshTransport;
 
@@ -114,6 +114,26 @@ impl NetworkTransport {
             }
             Self::Ssh(transport) => {
                 transport.fetch_full_with_algorithm(wants, deepen, shallow, filter, algorithm, thin)
+            }
+        }
+    }
+
+    /// Fetches with the pack spooled to a temporary file.
+    pub fn fetch_full_to_file(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: cvx_object::HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponseFile> {
+        match self {
+            Self::Http(transport) => {
+                transport.fetch_full_to_file(wants, deepen, shallow, filter, algorithm, thin)
+            }
+            Self::Ssh(transport) => {
+                transport.fetch_full_to_file(wants, deepen, shallow, filter, algorithm, thin)
             }
         }
     }

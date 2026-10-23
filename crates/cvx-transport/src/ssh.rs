@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use cvx_core::{Error, Result};
@@ -9,8 +9,9 @@ use cvx_protocol::{
 };
 
 use crate::http::{
-    FetchResponse, LsRefsResponse, PushCommand, PushReport, ReceivePackAdvertisement,
-    parse_fetch_response, parse_ls_refs, parse_push_response, parse_receive_advertisement,
+    FetchResponse, FetchResponseFile, LsRefsResponse, PushCommand, PushReport,
+    ReceivePackAdvertisement, parse_fetch_response, parse_fetch_response_to_file, parse_ls_refs,
+    parse_push_response, parse_receive_advertisement,
 };
 
 /// SSH transport that delegates authentication to the system `ssh` client.
@@ -157,6 +158,38 @@ impl SshTransport {
         let response = session.read_to_end()?;
         let _ = session.finish();
         parse_fetch_response(&response)
+    }
+
+    /// Fetches with the pack spooled to a temporary file.
+    pub fn fetch_full_to_file(
+        &self,
+        wants: &[ObjectId],
+        deepen: Option<u32>,
+        shallow: &[ObjectId],
+        filter: Option<&str>,
+        algorithm: HashAlgorithm,
+        thin: bool,
+    ) -> Result<FetchResponseFile> {
+        let mut session = self.spawn("git-upload-pack")?;
+        session.handshake()?;
+        let request = FetchRequest {
+            wants: wants.to_vec(),
+            haves: Vec::new(),
+            done: true,
+            thin,
+            no_progress: true,
+            include_tag: true,
+            ofs_delta: true,
+            deepen,
+            shallow: shallow.to_vec(),
+            filter: filter.map(str::to_owned),
+            object_format: algorithm,
+        };
+        session.write(&request.encode()?)?;
+        session.close_stdin();
+        let result = parse_fetch_response_to_file(BufReader::new(&mut session.stdout));
+        let _ = session.finish();
+        result
     }
 
     /// Discovers receive-pack references.
