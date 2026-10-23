@@ -10,14 +10,14 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | `.cvx/` control directory | Yes | Yes | Git-compatible internals |
 | `.git/` control directory | Yes | Yes | Compatibility mode |
 | Loose objects (SHA-1/SHA-256) | Yes | Yes | Hash verified on read |
-| Pack v2/v3 | Yes | v2 | Writer emits offset deltas and complete objects |
+| Pack v2/v3 | Yes | v2 | Writer emits offset deltas; thin packs use ref-deltas |
 | Pack index v2 | Yes | Yes | Version-1 indexes are rejected |
-| Delta chains (`ofs-delta`, `ref-delta`) | Yes | Yes | Offset deltas with bounded write depth; `ref-delta` read only |
+| Delta chains (`ofs-delta`, `ref-delta`) | Yes | Yes | Offset deltas for normal packs; ref-deltas for thin packs |
 | Multi-pack index (MIDX) | No | No | Individual `.idx` files are used |
 | `objects/info/alternates` | No | No | Rejected as unsupported |
 | `packed-refs` | Yes | Yes | Loose refs take precedence; refs can be deleted from packed-refs |
 | Index v2 | Yes | Yes | Default write format |
-| Index v3/v4 | Yes | No | Read path; writes v2, or v3 when extended flags require it |
+| Index v3/v4 | Yes | v2/v3 | Reads v2-v4; writes v3 only when extended flags require it |
 | Reflogs | Yes | Yes | Commits and branch switches |
 | SHA-256 repositories | Yes | Yes | Local workflows, packs, index, clones and protocol-v2 HTTPS/SSH negotiation |
 | Reftable storage | No | No | Detected and rejected |
@@ -89,12 +89,12 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | Git reads CVX repository | Yes, with `--git-dir=.cvx` |
 | `git fsck` on CVX repository | Yes |
 | CVX `fsck`, `gc`, reset, cherry-pick, revert and stash | Yes |
-| Hook lifecycle | Partial | Commit and pre-push hooks |
+| Hook lifecycle | Partial: commit and pre-push hooks |
 | File-backed pack reads | Yes | Objects decompressed on demand |
 | Streamed pack writes | Yes | Clone/gc/push temporary packs with incremental checksum |
 | Streaming index reads | Yes | Bounded buffers and incremental checksum |
 | Spooled fetch responses | Yes | HTTP/SSH pack data spooled to disk |
-| SHA-256 over HTTPS/SSH | Yes | Protocol-v2 object-format negotiation |
+| SHA-256 over HTTPS/SSH | Partial | HTTPS end-to-end tested; SSH uses the same protocol path with fixture pending |
 | Bare repositories | Yes | Git reads/writes refs and packs |
 | Read repositories packed by `git gc` | Yes |
 | Commit to a packed Git repository | Yes |
@@ -122,11 +122,8 @@ explicit error or is documented as out of scope; it is never silently ignored.
 | GitHub reviews | Yes | Approve, request changes, comment, list |
 | GitHub checks | Yes | Check-run listing for a commit/ref |
 | GitHub labels | Yes | Create, list, delete, assign and remove |
-| GitHub milestones | Not implemented | |
 | GitHub releases | Yes | Create, list |
 | GitHub workflow runs | Yes | Read-only listing |
-| GitHub OAuth / device flow | Not implemented | |
-| GraphQL | Not implemented | |
 | Replace refs and grafts | Not implemented | |
 
 ## GitHub integration

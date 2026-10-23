@@ -76,7 +76,7 @@ packs, pack indexes, the index file, refs, commits, tags and local clones use
 the 32-byte identifier width. Git accepts these repositories directly
 (`git --git-dir=.cvx fsck --strict`).
 
-SHA-256 over HTTPS/SSH and mixed-format transfers are rejected explicitly.
+SHA-256 over HTTPS/SSH is supported through protocol-v2 negotiation; mixed-format transfers are rejected explicitly. SSH SHA-256 still needs a dedicated server fixture.
 
 ## Delta packs and garbage collection
 

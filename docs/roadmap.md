@@ -121,7 +121,6 @@ Known limitations:
 - cherry-pick does not preserve the original author identity;
 - stash does not include untracked files and applies only to the commit where
   it was created;
-- reset does not accept pathspecs;
 - the default `gc` leaves old packs in place; `gc --prune` performs the full
   repack and removal.
 
@@ -141,7 +140,7 @@ Implemented in v0.6.0:
 Remaining:
 
 - pack/index streaming and thin-pack generation moved to Phase 8;
-- hooks, commit signing, submodules and LFS moved to Phase 9.
+- hooks, commit signing, submodules and LFS moved to Phase 11.
 
 ## Phase 8 — streaming, thin packs and network formats
 
