@@ -138,6 +138,18 @@ impl NetworkTransport {
         }
     }
 
+    /// Pushes ref updates with a packfile streamed from disk.
+    pub fn push_file(
+        &self,
+        updates: &[PushCommand],
+        pack_path: &std::path::Path,
+    ) -> Result<PushReport> {
+        match self {
+            Self::Http(transport) => transport.push_file(updates, pack_path),
+            Self::Ssh(transport) => transport.push_file(updates, pack_path),
+        }
+    }
+
     /// Discovers receive-pack references.
     pub fn discover_receive_pack(&self) -> Result<ReceivePackAdvertisement> {
         match self {

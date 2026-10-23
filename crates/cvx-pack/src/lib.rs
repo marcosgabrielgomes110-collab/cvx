@@ -21,5 +21,5 @@ pub use pack::{Pack, PackObject};
 pub use writer::{
     PackBase, PackInput, PackWriteOutcome, PackedObject, encode_pack,
     encode_pack_thin_with_algorithm, encode_pack_with_algorithm, write_pack,
-    write_pack_with_algorithm,
+    write_pack_thin_with_algorithm, write_pack_with_algorithm,
 };

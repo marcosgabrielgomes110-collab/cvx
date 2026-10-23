@@ -75,14 +75,32 @@ pub fn write_pack_with_algorithm(
     inputs: &[PackInput<'_>],
     algorithm: HashAlgorithm,
 ) -> Result<PackWriteOutcome> {
-    let directory = directory.as_ref();
+    write_pack_internal(directory.as_ref(), inputs, &[], algorithm)
+}
+
+/// Writes a pack that may reference bases already present on the receiver.
+pub fn write_pack_thin_with_algorithm(
+    directory: impl AsRef<Path>,
+    inputs: &[PackInput<'_>],
+    bases: &[PackBase<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<PackWriteOutcome> {
+    write_pack_internal(directory.as_ref(), inputs, bases, algorithm)
+}
+
+fn write_pack_internal(
+    directory: &Path,
+    inputs: &[PackInput<'_>],
+    bases: &[PackBase<'_>],
+    algorithm: HashAlgorithm,
+) -> Result<PackWriteOutcome> {
     cvx_core::fs::ensure_dir(directory)?;
 
     let mut temp = tempfile::Builder::new()
         .prefix(".cvx-pack-")
         .tempfile_in(directory)
         .map_err(|error| Error::io(directory.display().to_string(), error))?;
-    let built = build_pack_to(temp.as_file_mut(), inputs, &[], algorithm)?;
+    let built = build_pack_to(temp.as_file_mut(), inputs, bases, algorithm)?;
     temp.as_file()
         .sync_all()
         .map_err(|error| Error::io(temp.path().display().to_string(), error))?;

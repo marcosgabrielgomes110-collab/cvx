@@ -722,19 +722,26 @@ impl Repository {
                 data,
             })
             .collect();
-        let pack = if bases.is_empty() {
-            cvx_pack::encode_pack_with_algorithm(&inputs, self.hash_algorithm())?
+        let temp = tempfile::tempdir()
+            .map_err(|error| Error::io("failed to create push pack directory", error))?;
+        let written = if bases.is_empty() {
+            cvx_pack::write_pack_with_algorithm(temp.path(), &inputs, self.hash_algorithm())?
         } else {
-            cvx_pack::encode_pack_thin_with_algorithm(&inputs, &bases, self.hash_algorithm())?
+            cvx_pack::write_pack_thin_with_algorithm(
+                temp.path(),
+                &inputs,
+                &bases,
+                self.hash_algorithm(),
+            )?
         };
 
-        transport.push(
+        transport.push_file(
             &[PushCommand {
                 old,
                 new: tip,
                 reference,
             }],
-            &pack,
+            &written.pack_path,
         )?;
 
         Ok(PushOutcome {

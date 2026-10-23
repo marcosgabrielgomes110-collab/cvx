@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::io::{BufReader, Read, Write};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -344,6 +345,87 @@ impl HttpTransport {
             .send_bytes(body)
             .map_err(|error| http_error(url, error))?;
         Ok(Box::new(response.into_reader().take(MAX_BODY)))
+    }
+
+    /// Pushes ref updates with a packfile streamed from disk.
+    pub fn push_file(
+        &self,
+        updates: &[PushCommand],
+        pack_path: &std::path::Path,
+    ) -> Result<PushReport> {
+        if updates.is_empty() {
+            return Err(Error::Message("no ref updates were requested".to_owned()));
+        }
+        let advertisement = self.discover_receive_pack()?;
+        let algorithm = updates
+            .first()
+            .map(|update| update.new.algorithm())
+            .unwrap_or_default();
+        let mut capabilities = vec!["report-status".to_owned()];
+        if algorithm != HashAlgorithm::Sha1 {
+            let advertised = advertisement
+                .capabilities
+                .get("object-format")
+                .and_then(|value| value.as_deref());
+            if advertised != Some(algorithm.name()) {
+                return Err(Error::unsupported(format!(
+                    "the remote does not support {} pushes",
+                    algorithm.name()
+                )));
+            }
+            capabilities.push(format!("object-format={}", algorithm.name()));
+        }
+        if advertisement.capabilities.contains_key("side-band-64k") {
+            capabilities.push("side-band-64k".to_owned());
+        }
+        if advertisement.capabilities.contains_key("ofs-delta") {
+            capabilities.push("ofs-delta".to_owned());
+        }
+        if advertisement.capabilities.contains_key("thin-pack") {
+            capabilities.push("thin-pack".to_owned());
+        }
+        capabilities.push(format!("agent={AGENT}"));
+
+        let mut body = Vec::new();
+        for (index, update) in updates.iter().enumerate() {
+            let old = update.old.unwrap_or_else(|| ObjectId::zero(algorithm));
+            let mut command = format!("{old} {} {}", update.new, update.reference).into_bytes();
+            if index == 0 {
+                command.push(0);
+                command.extend_from_slice(capabilities.join(" ").as_bytes());
+            }
+            body.extend(encode_data(&command)?);
+        }
+        body.extend(flush());
+        let pack = File::open(pack_path)
+            .map_err(|error| Error::io(pack_path.display().to_string(), error))?;
+        let reader = Cursor::new(body).chain(pack);
+        let url = format!("{}/git-receive-pack", self.base);
+        let response = self.post_reader(
+            &url,
+            "application/x-git-receive-pack-request",
+            reader,
+            false,
+        )?;
+        parse_push_response(&response)
+    }
+
+    fn post_reader(
+        &self,
+        url: &str,
+        content_type: &str,
+        body: impl Read,
+        protocol_v2: bool,
+    ) -> Result<Vec<u8>> {
+        let mut request = self.agent.post(url).set("Content-Type", content_type);
+        if let Some(auth) = &self.auth {
+            request = request.set("Authorization", auth);
+        }
+        if protocol_v2 {
+            request = request.set("Git-Protocol", "version=2");
+        }
+        let response = request.send(body).map_err(|error| http_error(url, error))?;
+        read_body(response)
     }
 
     fn get(&self, url: &str, protocol_v2: bool) -> Result<Vec<u8>> {
